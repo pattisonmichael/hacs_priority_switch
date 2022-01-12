@@ -58,7 +58,7 @@ class PrioritySwitch(hass.Hass):
               self.control.append(True)
           else:
               if self.entity_exists(self.args["inputs"][entity]["control"]):
-                  self.listen_state(self.callback, entity=self.args["inputs"][entity]["control"],priority=priority,control=True)
+                  self.listen_state(self.callback, entity_id=self.args["inputs"][entity]["control"],priority=priority,control=True)
                   self.control_static.append(self.args["inputs"][entity]["control"])
                   self.control.append(False)
               else:
@@ -71,7 +71,7 @@ class PrioritySwitch(hass.Hass):
               self.value.append(self.args["inputs"][entity]["value"])
               self.value_static.append(True)
           else:
-              self.listen_state(self.callback, entity=self.args["inputs"][entity]["value"],priority=priority,control=False)
+              self.listen_state(self.callback, entity_id=self.args["inputs"][entity]["value"],priority=priority,control=False)
               self.value.append(self.args["inputs"][entity]["value"])
               self.value_static.append(False)
           #add auto off
