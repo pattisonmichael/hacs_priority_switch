@@ -67,9 +67,14 @@ class PrioritySwitch(hass.Hass):
                   self.control.append(True)
           #add Value
           if isinstance(self.args["inputs"][entity]["value"],int) or isinstance(self.args["inputs"][entity]["value"],float) or not self.entity_exists(self.args["inputs"][entity]["value"]):
-              self.debug("Input '" + entity + "' is using static value: " + str(self.args["inputs"][entity]["value"]))
-              self.value.append(self.args["inputs"][entity]["value"])
-              self.value_static.append(True)
+              if self.args["inputs"][entity]["value"]==None or str(self.args["inputs"][entity]["value"]).lower()=='none':
+                self.debug("None Value found")
+                self.value.append(None)
+                self.value_static.append(True)          
+              else:
+                self.debug("Input '" + entity + "' is using static value: " + str(self.args["inputs"][entity]["value"]))
+                self.value.append(self.args["inputs"][entity]["value"])
+                self.value_static.append(True)          
           else:
               self.listen_state(self.callback, entity_id=self.args["inputs"][entity]["value"],priority=priority,control=False)
               self.value.append(self.args["inputs"][entity]["value"])
@@ -159,6 +164,14 @@ class PrioritySwitch(hass.Hass):
     elif device=="switch" or device=="scene" or device=="light":
       self.debug("Use turn_on service")
       #self.turn_on("light.office_1", color_name = "green")
+    elif device=="fan":
+      self.debug("Use fan.set_preset_mode")
+      if value.lower()=="off":
+        self.debug("Call fan.turn_off")
+        self.call_service("fan/turn_off", entity_id = self.args["output"])
+      else:
+        self.debug("Call fan.set_preset_mode with %s",value)
+        self.call_service("fan/set_preset_mode", entity_id = self.args["output"], preset_mode = value)
     else:
       self.log("Unknown device: %s", device, level="INFO")
     self.lastValue=value
@@ -173,6 +186,9 @@ class PrioritySwitch(hass.Hass):
     targetPriority = self.findHighestActivPriority()
     self.debug("Target Priority: %s", targetPriority)
     value=self.getValueFromPriority(targetPriority)
+    if value==None:
+      self.debug("Static None Value found, not sending a value!")
+      return
     priority=kwargs["priority"]
     self.sendValue(value)
     if new == "on" and not self.auto_off[priority] is None:
