@@ -1,5 +1,9 @@
-# pylance: disable=import-error
-import hassapi as hass
+# pyright: reportMissingImports=false
+import hassapi as hass # type: ignore
+import adbase as ad
+import json
+from datetime import datetime,timedelta
+#from types import SimpleNamespace as Namespace
 
 class PrioritySwitch(hass.Hass):
   def onoff2bool(self,value):
@@ -17,7 +21,61 @@ class PrioritySwitch(hass.Hass):
         else:
             self.log(text)
 
+  def updateStatus(self,status,attributes):
+    if not self.status_entity is None:
+      self.status_entity.set_state(state=status,attributes = attributes)
+  
+  #Get a item from an array or returns a default value
+  def getConfigValue(self, array, item, default=None):
+    if item in array:
+      return array[item]
+    else:
+      return default
+
+  def getInputByIndex(self, index):
+    n=len(self.args["inputs"])
+    for i, key in enumerate(self.args["inputs"].keys()):
+      if i == index:
+        return self.args["inputs"][key]
+    raise IndexError("input index not found")
+
+  def listen_sun(self,input,priority):
+    self.debug("Listen Sun - Input: %s, Priority: %s",input,priority)
+    self.args["inputs"][input]["sun_handle"]=self.listen_state(self.sun_callback, entity_id="sun.sun", attribute="all",priority=priority,input=input)
+    self.debug("Register listen sun for input: %s, Priority: %s, Handle: %s",input,priority,self.args["inputs"][input]["sun_handle"])
+    self.debug("Current Azimut: %s",self.entities.sun.sun.attributes.azimuth)
+    value,active=self.calc_shade_position(input,self.entities.sun.sun.attributes.azimuth,self.entities.sun.sun.attributes.elevation)
+    self.args["inputs"][input]["value"]=value
+    self.args["inputs"][input]["active"]=active
+    #self.debug("Current shade height: %s",self.value[priority])
+
+  def cancel_listen_sun(self,input):
+    self.debug("Cancel listen Sun - Input: %s",input)
+    self.cancel_listen_state(self.args["inputs"][input]["sun_handle"])
+    self.debug("Unregister listen sun for input: %s, Handle: %s",input,self.args["inputs"][input]["sun_handle"])
+    self.args["inputs"][input]["sun_handle"]=None
+
+  ### get auto_on
+  def isAutoOn(self,input):
+    self.debug("isAutoOn: %s", input)
+    if "auto_on" in self.args["inputs"][input] and isinstance(self.args["inputs"][input]["auto_on"],int):
+        return self.args["inputs"][input]["auto_on"]
+        self.debug("Auto on in %s s", self.args["inputs"][input]["auto_on"])
+    else:
+        return False
+    
+  ### get auto_off
+  def isAutoOff(self,input):
+    self.debug("isAutoOff: %s", input)
+    if "auto_off" in self.args["inputs"][input] and isinstance(self.args["inputs"][input]["auto_off"],int):
+        return self.args["inputs"][input]["auto_off"]
+        self.debug("Auto off in %s s", self.args["inputs"][input]["auto_off"])
+    else:
+        return False
+    
+
   def initialize(self):
+ 
     #if "loglevel" in self.args and self.args["loglevel"].upper() in ["INFO", "WARNING", "ERROR", "CRITICAL", "DEBUG", "NOTSET"]:
     if "debug" in self.args and self.args["debug"]:
         #self.set_log_level(self.args["loglevel"].upper())
@@ -33,122 +91,326 @@ class PrioritySwitch(hass.Hass):
 #    self.log("Test WARNING", level="WARNING")
 #    self.log("Test ERROR", level="ERROR")
 #    self.log("Test DEBUG", level="DEBUG")
-    self.control=[]
-    self.control_static=[]
-    self.value=[]
-    self.value_static=[]
-    self.priorityName=[]
-    self.auto_off=[]
-    self.auto_off_running=[]
-    self.auto_on=[]
-    self.auto_on_running=[]
+    # self.control=[]
+    # self.control_static=[]
+    # self.value=[]
+    # self.value_static=[]
+    # self.priorityName=[]
+    # self.auto_off=[]
+    # self.auto_off_running=[]
+    # self.auto_on=[]
+    # self.auto_on_running=[]
     self.lastValue=None
+    # self.output_sequence=None
+    # self.auto_shade=False
+    # self.azimut=None
+    # self.elevation=None
+    # self.buildingDeviation=None
+    # self.offset_entry=None
+    # self.offset_exit=None
+    # self.setIfInShadow= False
+    # self.shadow= 0
+    # self.elevation_lt10= 0
+    # self.elevation_10to20= 0
+    # self.elevation_20to30= 102
+    # self.elevation_30to40= 153
+    # self.elevation_40to50= 153
+    # self.elevation_50to60= 204
+    # self.elevation_gt60= 204
     priority=0
+    self.deadtime = datetime.now()
+    self.automation_block = datetime.now()
+    
     if self.args["enabled"]:
       self.log("Priority Switch enabled", level="INFO")
-      if not self.entity_exists(self.args["output"]):
+      if not self.entity_exists(self.args["output"]) and not self.args["output_sequence"]:
         self.debug("No valid output defined: %s",self.args["output"])
         return
+      if self.args["output_sequence"]:
+        self.output_sequence = self.args["output_sequence"]
       for entity in self.args["inputs"]:
+          # save entity name
+          self.args["inputs"][entity]["name"]=entity
+          # Save priority
+          self.args["inputs"][entity]["priority"]=priority
+          #self.debug(entity)
           #Add Control
-          self.priorityName.append(entity)
+          #self.priorityName.append(entity)
+          self.debug("Input: %s",entity)
+          ### If control is  a static value save the entity
           if not self.onoff2bool(self.args["inputs"][entity]["control"]) is None:
               self.debug("Input '" + entity + "' is static " + str(self.args["inputs"][entity]["control"]))
-              self.control_static.append(self.onoff2bool(self.args["inputs"][entity]["control"]))
-              self.control.append(True)
+              self.args["inputs"][entity]["active"]=self.onoff2bool(self.args["inputs"][entity]["control"])
+          ### Control is  not a static value
           else:
+              ### If entity exists register callback and get current value
               if self.entity_exists(self.args["inputs"][entity]["control"]):
-                  self.listen_state(self.callback, entity_id=self.args["inputs"][entity]["control"],priority=priority,control=True)
-                  self.control_static.append(self.args["inputs"][entity]["control"])
-                  self.control.append(False)
+                  self.listen_state(self.callback, entity_id=self.args["inputs"][entity]["control"],priority=priority,input=entity,control=True)
+                  self.args["inputs"][entity]["active"]=self.onoff2bool(self.get_state(entity_id=self.args["inputs"][entity]["control"]))
               else:
                   self.debug("'" + self.args["inputs"][entity]["control"] + "' is an invalid entity")
-                  self.control_static.append(False)
-                  self.control.append(True)
-          #add Value
-          if isinstance(self.args["inputs"][entity]["value"],int) or isinstance(self.args["inputs"][entity]["value"],float) or not self.entity_exists(self.args["inputs"][entity]["value"]):
+                  self.args["inputs"][entity]["active"]=False
+
+          ### Check if Shade mode
+          #self.debug("auto_shade: %s","auto_shade" in self.args["inputs"][entity])
+          if "auto_shade" in self.args["inputs"][entity] and self.args["inputs"][entity]["auto_shade"]: # auto shade
+            self.args["inputs"][entity]["facadeentry"]=self.args["inputs"][entity]["buildingDeviation"] + self.args["inputs"][entity]["offset_entry"] if int(self.args["inputs"][entity]["offset_entry"]) else -90
+            self.args["inputs"][entity]["facadeexit"]=self.args["inputs"][entity]["buildingDeviation"] + self.args["inputs"][entity]["offset_exit"] if int(self.args["inputs"][entity]["offset_entry"]) else 90
+            # in Shade mode value is considered static
+            self.args["inputs"][entity]["dynamic"]=False
+            if self.args["inputs"][entity]["active"]:
+              self.listen_sun(entity,priority)
+            #self.listen_state(self.callback, entity_id=self.args["inputs"][entity]["control"],priority=priority,control=True)
+            #self.debug("Args: %s", self.args["inputs"][entity])
+          ### add Value, check if is numeric or not an existing entity
+          elif isinstance(self.args["inputs"][entity]["value"],int) or isinstance(self.args["inputs"][entity]["value"],float) or not self.entity_exists(self.args["inputs"][entity]["value"]):
               if self.args["inputs"][entity]["value"]==None or str(self.args["inputs"][entity]["value"]).lower()=='none':
                 self.debug("None Value found")
-                self.value.append(None)
-                self.value_static.append(True)          
+                self.args["inputs"][entity]["value"]=None
+                self.args["inputs"][entity]["dynamic"]=False
               else:
                 self.debug("Input '" + entity + "' is using static value: " + str(self.args["inputs"][entity]["value"]))
-                self.value.append(self.args["inputs"][entity]["value"])
-                self.value_static.append(True)          
+                self.args["inputs"][entity]["value"]=self.args["inputs"][entity]["value"]
+                self.args["inputs"][entity]["dynamic"]=False
           else:
               self.listen_state(self.callback, entity_id=self.args["inputs"][entity]["value"],priority=priority,control=False)
-              self.value.append(self.args["inputs"][entity]["value"])
-              self.value_static.append(False)
-          #add auto off
-          if "auto_off" in self.args["inputs"][entity] and isinstance(self.args["inputs"][entity]["auto_off"],int):
-              self.auto_off.append(self.args["inputs"][entity]["auto_off"])
-              self.debug("Auto off in %s s", self.args["inputs"][entity]["auto_off"])
-          else:
-              self.auto_off.append(None)
-          self.auto_off_running.append(None)
-          #add auto on
-          if "auto_on" in self.args["inputs"][entity] and isinstance(self.args["inputs"][entity]["auto_on"],int):
-              self.auto_on.append(self.args["inputs"][entity]["auto_on"])
-              self.debug("Auto on in %s s", self.args["inputs"][entity]["auto_on"])
-          else:
-              self.auto_on.append(None)
-          self.auto_on_running.append(None)
+              self.args["inputs"][entity]["value"]=self.args["inputs"][entity]["value"]
+              self.args["inputs"][entity]["dynamic"]=True
+          self.args["inputs"][entity]["auto_on_running"]=None
+          self.args["inputs"][entity]["auto_off_running"]=None
           priority=priority+1
+          self.debug("Input data: %s",self.args["inputs"][entity])
+          # #### OLD
+          # #special case input with auto_shade
+          
+          # self.debug("auto_shade: %s","auto_shade" in self.args["inputs"][entity])
+          # if "auto_shade" in self.args["inputs"][entity] and self.args["inputs"][entity]["auto_shade"]: # auto shade
+          #   #self.azimut=self.args["inputs"][entity]["azimut"]
+          #   #self.elevation=self.args["inputs"][entity]["elevation"]
+          #   #self.buildingDeviation=self.args["inputs"][entity]["buildingDeviation"]
+          #   #self.offset_entry=self.args["inputs"][entity]["offset_entry"]
+          #   #self.offset_exit=self.args["inputs"][entity]["offset_exit"]
+          #   #self.setIfInShadow= self.args["inputs"][entity]["setIfInShadow"]
+          #   #self.shadow= self.getConfigValue(self.args["inputs"][entity],"shadow")
+          #   #self.debug("Shadow: %s", self.getConfigValue(self.args["inputs"][entity],"shadow"))
+          #   # self.elevation_lt10= self.args["inputs"][entity]["elevation_lt10"]
+          #   # self.elevation_10to20= self.args["inputs"][entity]["elevation_10to20"]
+          #   # self.elevation_20to30= self.args["inputs"][entity]["elevation_20to30"]
+          #   # self.elevation_30to40= self.args["inputs"][entity]["elevation_30to40"]
+          #   # self.elevation_40to50= self.args["inputs"][entity]["elevation_40to50"]
+          #   # self.elevation_50to60= self.args["inputs"][entity]["elevation_50to60"]
+          #   # self.elevation_gt60= self.args["inputs"][entity]["elevation_gt60"]
+            
+          #   ### Is static control?
+          #   if not self.onoff2bool(self.args["inputs"][entity]["control"]) is None:
+          #     self.args["inputs"][entity]["control_static"]=self.args["inputs"][entity]["control"]
+          #     self.args["inputs"][entity]["control"]=False
+          #   else:
+          #     self.args["inputs"][entity]["control_static"]=self.onoff2bool(self.args["inputs"][entity]["control"])
+          #     self.args["inputs"][entity]["active"]=self.onoff2bool(self.args["inputs"][entity]["control"])
+          #     self.args["inputs"][entity]["control"]=True
+          #   self.args["inputs"][entity]["facadeentry"]=self.args["inputs"][entity]["buildingDeviation"] + self.args["inputs"][entity]["offset_entry"] if int(self.args["inputs"][entity]["offset_entry"]) else -90
+          #   self.args["inputs"][entity]["facadeexit"]=self.args["inputs"][entity]["buildingDeviation"] + self.args["inputs"][entity]["offset_exit"] if int(self.args["inputs"][entity]["offset_entry"]) else 90
+          #   # in Shade mode value is considered static
+          #   self.args["inputs"][entity]["value_static"]=True
+
+
+          #   self.control_static.append(self.args["inputs"][entity]["control"])
+          #   self.control.append(False)
+            
+          #   #self.args["inputs"][entity]["sunhandle"]=self.listen_state(self.sun_callback, entity_id="sun.sun", attribute="all",priority=priority,entity=entity)
+          #   self.value.append(None)
+          #   self.value_static.append(True)    
+          #   self.listen_sun(entity,priority)
+          #   self.listen_state(self.callback, entity_id=self.args["inputs"][entity]["control"],priority=priority,control=True)
+          #   self.debug("Args: %s", self.args["inputs"][entity])
+            
+          #   #self.run_every(self.auto_shadow_callback,"now", 60)
+
+          # ### If control is  a static value save the entity
+          # elif not self.onoff2bool(self.args["inputs"][entity]["control"]) is None:
+          #     self.debug("Input '" + entity + "' is static " + str(self.args["inputs"][entity]["control"]))
+          #     self.control_static.append(self.onoff2bool(self.args["inputs"][entity]["control"]))
+          #     self.control.append(True)
+          #     ### Is static control? 
+          #     self.args["inputs"][entity]["control_static"]=self.onoff2bool(self.args["inputs"][entity]["control"])
+          #     self.args["inputs"][entity]["active"]=self.onoff2bool(self.args["inputs"][entity]["control"])
+          #     self.args["inputs"][entity]["control"]=True
+          # ### Control is  not a static value
+          # else:
+          #     if self.entity_exists(self.args["inputs"][entity]["control"]):
+          #         self.listen_state(self.callback, entity_id=self.args["inputs"][entity]["control"],priority=priority,control=True)
+          #         self.control_static.append(self.args["inputs"][entity]["control"])
+          #         self.control.append(False)
+          #     else:
+          #         self.debug("'" + self.args["inputs"][entity]["control"] + "' is an invalid entity")
+          #         self.control_static.append(False)
+          #         self.control.append(True)
+          # #add Value
+          # if isinstance(self.args["inputs"][entity]["value"],int) or isinstance(self.args["inputs"][entity]["value"],float) or not self.entity_exists(self.args["inputs"][entity]["value"]):
+          #     if self.args["inputs"][entity]["value"]==None or str(self.args["inputs"][entity]["value"]).lower()=='none':
+          #       self.debug("None Value found")
+          #       self.value.append(None)
+          #       self.value_static.append(True)          
+          #     else:
+          #       self.debug("Input '" + entity + "' is using static value: " + str(self.args["inputs"][entity]["value"]))
+          #       self.value.append(self.args["inputs"][entity]["value"])
+          #       self.value_static.append(True)          
+          # else:
+          #     self.listen_state(self.callback, entity_id=self.args["inputs"][entity]["value"],priority=priority,control=False)
+          #     self.value.append(self.args["inputs"][entity]["value"])
+          #     self.value_static.append(False)
+          # #add auto off
+          # if "auto_off" in self.args["inputs"][entity] and isinstance(self.args["inputs"][entity]["auto_off"],int):
+          #     self.auto_off.append(self.args["inputs"][entity]["auto_off"])
+          #     self.debug("Auto off in %s s", self.args["inputs"][entity]["auto_off"])
+          # else:
+          #     self.auto_off.append(None)
+          # self.auto_off_running.append(None)
+          # #add auto on
+          # if "auto_on" in self.args["inputs"][entity] and isinstance(self.args["inputs"][entity]["auto_on"],int):
+          #     self.auto_on.append(self.args["inputs"][entity]["auto_on"])
+          #     self.debug("Auto on in %s s", self.args["inputs"][entity]["auto_on"])
+          # else:
+          #     self.auto_on.append(None)
+          # self.auto_on_running.append(None)
+          # priority=priority+1
               
-      self.debug("Control : %s", self.control)
-      self.debug("Control Static: %s", self.control_static)
-      self.debug("Value: %s", self.value)
-      self.debug("Value Static: %s", self.value_static)
-      self.debug("Priority names: %s", self.priorityName)
-      self.maxPriority=len(self.priorityName)-1
-      self.debug("Max Priority: %s", self.maxPriority)
-    self.debug("End Init")
+      # self.debug("Control : %s", self.control)
+      # self.debug("Control Static: %s", self.control_static)
+      # self.debug("Value: %s", self.value)
+      # self.debug("Value Static: %s", self.value_static)
+      # self.debug("Priority names: %s", self.priorityName)
+      # self.maxPriority=len(self.priorityName)-1
+      # self.debug("Max Priority: %s", self.maxPriority)
+      # self.debug("Output Squence: %s", self.output_sequence)
+      # self.debug("Auto On: %s", self.auto_on)
+      # self.debug("Auto Off: %s", self.auto_off)
+      
+    if self.args["status_entity"]:
+      self.status_entity=self.get_entity(self.args["status_entity"])
+      self.updateStatus("init",{"current":"init","value": None,"device":None,"timestamp":None})
+    else:
+      self.status_entity = None
+    if self.args["initial_run"]:
+      self.debug("Initial run requested")
+      self.run('on',0)
+      self.debug(self.name)
+#      self.status_entity = self.add("priorityswitch." + self.name,state="init", attributes={"last_run": datetime.now().time})
+    if self.args["detect_manual"]:
+      self.ad = self.get_ad_api()
+      #self.status_entity = self.add("priorityswitch." + self.name,state="init", attributes={"last_run": "1234"})
+      self.ad.listen_event(self.event_callback,"state_changed",entity_id = self.args["output"])
+
+    self.debug("End Init")    
+
+  def event_callback(self, event_name, data, kwargs):
+    self.debug("Deadtime: %s", self.deadtime)
+    self.debug("Current Time: %s", datetime.now())
+    self.debug("Event Name: %s, Data: %s, kwargs: %s",event_name, data, kwargs)
+    #self.debug("Event Data: %s", data)
+    #self.debug("Event Args: %s", kwargs)
+    if datetime.now() < self.deadtime:
+      self.debug("Event Mode: Automation")
+    else:
+      self.debug("Event Mode: External")
+      self.automation_block =  datetime.now() + timedelta(minutes=self.args["automation_pause"])
+      self.debug("All Automations paused till: %s", self.automation_block)
+      self.updateStatus("manual override",{"blocked till":self.automation_block})
+      self.run_in(self.unblock_callback, timedelta(minutes=self.args["automation_pause"]).total_seconds(), event_name=event_name, data=data, kwargs=kwargs)
+
+
+  def unblock_callback(self, kwargs):
+    self.debug("Unblock Callback, Now: %s, Deadtime: %s, Event Name: %s, Data: %s, kwargs: %s",datetime.now(),self.deadtime,kwargs["event_name"],kwargs["data"],kwargs)
+    #if datetime.now()>= self.deadtime:
+    self.updateStatus("unblocking",{"blocked till":""})
+    self.run("on",0)
+    
 
 
   def findHighestActivPriority(self):
-    x=self.maxPriority
     found=False
-    while x >= 0:
-        self.debug("x: " + str(x))
-        self.debug("Static: " + str(self.control[x]))
-        if self.control[x]:
-          self.debug("Control Static Value: " + self.priorityName[x] + " = " + str(self.control_static[x]))
-          if self.control_static[x]:
-            self.debug("true")
-            found=True
-            break
-        else:
-          self.debug("Dynamic Value: "  + self.priorityName[x] + " = " + self.get_state(entity_id=self.control_static[x]))
-          if self.onoff2bool(self.get_state(entity_id=self.control_static[x])):
-            self.debug("True")
-            found=True
-            break
-        x -=1
+    priority=None
+    for input in self.args["inputs"]:
+          # save entity name
+    #      self.args["inputs"][entity]["name"]=entity
+      if self.args["inputs"][input]["active"]:
+        found=True
+        priority=input
+
     if found:
-      self.debug("Highest Active Priority: %s", x)
-      return x
+      self.debug("Highest Active Priority: %s", priority)
+      return priority
     else:
       self.debug("All Controls are off!")
       return None
-  def getValueFromPriority(self,priority):
-    #use Static Value
-    if self.value_static[priority]:
-      self.debug("Static Value: %s", self.value[priority])
-      return self.value[priority]
-    else:
-      self.debug("Dynamic Value: %s", self.get_state(entity_id=self.value[priority]))
-      return self.get_state(entity_id=self.value[priority])
+  # OLD
+  # def findHighestActivPriority(self):
+  #   x=self.maxPriority
+  #   found=False
+  #   while x >= 0:
+  #       self.debug("Priority: " + str(x))
+  #       self.debug("Static: " + str(self.control[x]))
+  #       if self.control[x]:
+  #         self.debug("Control Static Value: " + self.priorityName[x] + " = " + str(self.control_static[x]))
+  #         if self.control_static[x]:
+  #           self.debug("true")
+  #           found=True
+  #           break
+  #       else:
+  #         self.debug("Dynamic Value: "  + self.priorityName[x] + " = " + self.get_state(entity_id=self.control_static[x]))
+  #         if self.onoff2bool(self.get_state(entity_id=self.control_static[x])):
+  #           self.debug("True")
+  #           found=True
+  #           break
+  #       x -=1
+  #   if found:
+  #     self.debug("Highest Active Priority: %s", x)
+  #     return x
+  #   else:
+  #     self.debug("All Controls are off!")
+  #     return None
 
-  def sendValue(self, value):
-    self.debug("Value to send: %s", value)
+#OLD
+  # def getValueFromPriority(self,priority):
+  #   #use Static Value
+  #   if self.value_static[priority]:
+  #     self.debug("Static Value: %s", self.value[priority])
+  #     return self.value[priority]
+  #   else:
+  #     self.debug("Dynamic Value: %s", self.get_state(entity_id=self.value[priority]))
+  #     return self.get_state(entity_id=self.value[priority])
+
+  def sendValue(self, value, priority):
+    self.debug("Value to send: %s, Priority: %s", value, priority)
     device, entity = self.split_entity(self.args["output"])
-    self.debug("Old Value: %s", self.lastValue)
-    self.debug("New Value: %s", value)
-    self.debug("Device: %s, Entity: %s", device,entity)
+    self.debug("Old Value: %s, New Value: %s, Device: %s, Entity: %s", self.lastValue, value, device, entity)
+    #self.debug("New Value: %s", value)
+    #self.debug("Device: %s, Entity: %s", device,entity)
+    if self.args["detect_manual"]:
+      self.debug("Set Deadtime: %s",datetime.now() + timedelta(seconds=self.args["deadtime"]))
+      self.deadtime = datetime.now() + timedelta(seconds=self.args["deadtime"])
+
     if self.lastValue==value:
-      self.debug("Old and new value are the same, no update needed!")
-      return
-    if device=="input_number":
+      if self.get_state(entity_id=self.args["output"]) == value:
+        self.debug("Old and new value are the same, no update needed!")
+        return
+      self.debug("External value does not match desired state. Sending update!")
+    if self.output_sequence:
+      #value = 30
+      #teststr = '{"light/turn_on": {"entity_id": "light.office", "brightness": "%VALUE%"}}'
+      #teststr=self.args["output_sequence"]
+      #teststr2 = teststr.replace("%VALUE%",str(value))
+      #testobj = json.loads(teststr2, object_hook=lambda d: Namespace(**d))
+      sequence_str = self.output_sequence.replace("%VALUE%",str(value))
+      sequence = json.loads(sequence_str)
+      #self.log(teststr)
+      #self.log(teststr2)
+      #self.log(testobj)
+      handle = self.run_sequence([sequence])
+      self.debug("Use Sequence")
+
+    elif device=="input_number":
       self.debug("Use set_number service")
       self.set_value(self.args["output"], value)
     elif device=="input_text":
@@ -175,48 +437,87 @@ class PrioritySwitch(hass.Hass):
     else:
       self.log("Unknown device: %s", device, level="INFO")
     self.lastValue=value
+    self.updateStatus(priority,{"value":value,"timestamp":datetime.now(),"device":device, "current":value})
 
   def callback(self, entity, attribute, old, new, kwargs):
-    self.debug("Callback Priority:" + entity)
-    self.debug("Priority: " + str(kwargs["priority"]))
-    self.debug("Attribute:" + attribute)
-    self.debug("Old:" + old)
-    self.debug("New:" + new)
-    self.debug("Control: %s", kwargs["control"])
+    self.debug("Callback Priority: %s, Priority: %s, Attributes: %s, Old: %s, New: %s, kwargs: %s",entity,kwargs["priority"], attribute, old, new, kwargs)
+    #self.debug("Priority: " + str(kwargs["priority"]))
+    #self.debug("Attribute:" + attribute)
+    #self.debug("Old:" + old)
+    #self.debug("New:" + new)
+    #self.debug("Control: %s", kwargs["control"])
+    #self.debug("kwargs: %s", kwargs)
+    #input = self.getInputByIndex(kwargs["priority"])
+    input=self.args["inputs"][kwargs["input"]]
+    input["active"]=self.onoff2bool(new)
+    self.debug("Input data: %s", input)
+    if "auto_shade" in input:
+      if new=="on":
+        self.debug("register sun")
+        self.listen_sun(kwargs["input"],kwargs["priority"])
+      else:
+        self.debug("unregister sun")
+        self.cancel_listen_sun(kwargs["input"])
+    if datetime.now() < self.automation_block:
+      self.debug("Automation blocked till: %s", self.automation_block)
+    else:
+      self.run(new,kwargs["priority"])
+
+
+
+  def run(self,new,priority):
     targetPriority = self.findHighestActivPriority()
-    self.debug("Target Priority: %s", targetPriority)
-    value=self.getValueFromPriority(targetPriority)
-    if value==None:
-      self.debug("Static None Value found, not sending a value!")
-      return
-    priority=kwargs["priority"]
-    self.sendValue(value)
-    if new == "on" and not self.auto_off[priority] is None:
+    self.debug("Run: Target Priority: %s, New: %s, Priority %s", targetPriority,new,priority)
+    #value=self.getValueFromPriority(targetPriority)
+    if self.args["inputs"][targetPriority]["dynamic"]:
+      value=self.get_state(self.args["inputs"][targetPriority]["value"])
+      self.debug("using dynamic value: %s from %s",value,self.args["inputs"][targetPriority]["value"])
+    else:
+      value=self.args["inputs"][targetPriority]["value"]
+      if value==None:
+        self.debug("Static None Value found, not sending a value!")
+        return
+      self.debug("Send static value: %s",value)
+      #priority=kwargs["priority"]
+    
+    self.debug("Send Value: %s", int(float(value)))
+    self.sendValue(int(float(value)), targetPriority)
+    ### if new == on and autooff
+    #if new == "on" and not self.auto_off[priority] is None:
+    input=self.getInputByIndex(priority)
+    inputname=input["name"]
+    if new == "on" and not self.isAutoOff(input["name"]) is False:
         self.debug("Trigger auto off")
-        if not self.auto_off_running[priority] is None and self.timer_running(self.auto_off_running[priority]):
-            self.cancel_timer(self.auto_off_running[priority])
-            self.auto_off_running[priority]=None
+        #if not self.auto_off_running[priority] is None and self.timer_running(self.auto_off_running[priority]):
+        if not self.args["inputs"][input["name"]]["auto_off_running"] is None and self.timer_running(self.args["inputs"][input["name"]]["auto_off_running"]):
+            self.cancel_timer(self.args["inputs"][input["name"]]["auto_off_running"])
+            sself.args["inputs"][input["name"]]["auto_off_running"]=None
             self.debug("Cancel previous auto off timer")
-        self.auto_off_running[priority]=self.run_in(self.auto_callback,self.auto_off[priority],priority=priority,switch="off")
-        self.debug("Timer handle: %s", self.auto_off_running[priority])
-    if new == "off" and not self.auto_on[priority] is None:
-        if not self.auto_on_running[priority] is None and self.timer_running(self.auto_on_running[priority]):
-            self.cancel_timer(self.auto_on_running[priority])
-            self.auto_on_running[priority]=None
+        self.args["inputs"][input["name"]]["auto_off_running"]=self.run_in(self.auto_callback,self.isAutoOff(input["name"]),priority=priority,switch="off")
+        self.debug("Timer handle: %s", self.args["inputs"][input["name"]]["auto_off_running"])
+        self.updateStatus(input["name"],{"auto_off":True,"auto_timer":datetime.now() + timedelta(seconds=self.isAutoOff(input["name"]))})
+    if new == "off" and not self.isAutoOn(input["name"]) is False:
+        if not self.args["inputs"][input["name"]]["auto_on_running"] is None and self.timer_running(self.args["inputs"][input["name"]]["auto_on_running"]):
+            self.cancel_timer(self.args["inputs"][input["name"]]["auto_on_running"])
+            self.args["inputs"][input["name"]]["auto_on_running"]=None
             self.debug("Cancel previous auto on timer")
         self.debug("Trigger auto on")
-        self.auto_on_running[priority]=self.run_in(self.auto_callback,self.auto_on[priority],priority=priority,switch="on")
-        self.debug("Timer handle: %s", self.auto_on_running[priority])
+        self.args["inputs"][input["name"]]["auto_on_running"]=self.run_in(self.auto_callback,self.isAutoOn(input["name"]),priority=priority,switch="on")
+        self.debug("Timer handle: %s", self.args["inputs"][input["name"]]["auto_on_running"])
+        self.updateStatus(input["name"],{"auto_on":True,"auto_timer":datetime.now() + timedelta(seconds=self.isAutoOn(input["name"]))})
 #    else:
 #        self.debug("No auto reset")
-    if new == "off" and not self.auto_off_running[priority] is None:
-        self.cancel_timer(self.auto_off_running[priority])
-        self.auto_off_running[priority]=None
+    if new == "off" and not self.args["inputs"][input["name"]]["auto_off_running"] is None:
+        self.cancel_timer(self.args["inputs"][input["name"]]["auto_off_running"])
+        self.args["inputs"][input["name"]]["auto_off_running"]=None
         self.debug("Cancel previous auto off timer")
-    if new == "on" and not self.auto_on_running[priority] is None:
-        self.cancel_timer(self.auto_on_running[priority])
-        self.auto_on_running[priority]=None
+        self.updateStatus(input["name"],{"auto_off":False,"auto_timer":""})
+    if new == "on" and not self.args["inputs"][input["name"]]["auto_on_running"] is None:
+        self.cancel_timer(self.args["inputs"][input["name"]]["auto_on_running"])
+        self.args["inputs"][input["name"]]["auto_on_running"]=None
         self.debug("Cancel previous auto on timer")
+        self.updateStatus(input["name"],{"auto_on":False,"auto_timer":""})
+
 
   def auto_callback(self,kwargs):
       self.debug("Auto Callback triggered for Priority %s",kwargs["priority"])
@@ -224,7 +525,82 @@ class PrioritySwitch(hass.Hass):
           self.debug("Switching %s off!",self.control_static[kwargs["priority"]])
           self.turn_off(self.control_static[kwargs["priority"]])
           self.auto_off_running[kwargs["priority"]]=None
+          self.updateStatus(self.priorityName[kwargs["priority"]],{"auto_off":False,"auto_timer":""})
       elif kwargs["switch"]=="on":
           self.debug("Switching %s on!",self.control_static[kwargs["priority"]])
           self.turn_on(self.control_static[kwargs["priority"]])
           self.auto_on_running[kwargs["priority"]]=None
+          self.updateStatus(self.priorityName[kwargs["priority"]],{"auto_on":False,"auto_timer":""})
+
+  def sun_callback(self, entity, attribute, old, new, kwargs):
+    self.debug("Sun Callback - Input:" + kwargs["input"])
+    self.debug("Entity: %s, Attributes: %s, Old: %s, New: %s, kwargs: %s", entity, attribute, old, new, kwargs)
+    #self.debug("Attribute:" + attribute)
+    #self.debug("Old:" + str(old))
+    #self.debug("New:" + str(new))
+    #self.debug("kwargs: %s", str(kwargs))
+    value, active = self.calc_shade_position(kwargs["input"],new["attributes"]["azimuth"],new["attributes"]["elevation"])
+    self.debug("Calculated Shade position: %s, Active: %s",value,active)
+    #self.value[kwargs["priority"]]=value
+    self.args["inputs"][kwargs["input"]]["value"]=value
+    self.args["inputs"][kwargs["input"]]["active"]=active
+    if datetime.now() < self.automation_block:
+      self.debug("Automation blocked till: %s", self.automation_block)
+    else:
+      self.run(new,kwargs["priority"])
+
+  def calc_shade_position(self,input,azimuth,elevation):
+    #Azimuth needs to be larger than helper or smaller than facadeexit
+    self.debug("Calc_shade_Position: Input: %s, Azimuth: %s, Elevation %s",input,azimuth,elevation)
+    sun=False
+    value=0
+    if elevation<=0:
+      sun=False
+    elif self.args["inputs"][input]["facadeentry"] < 0:
+      helper=self.args["inputs"][input]["facadeentry"]+360
+      if azimuth>=helper or azimuth<=self.args["inputs"][input]["facadeexit"]:
+        sun=True
+      else:
+        sun=False
+    #Azimuth needs to be smaller than helper or larger than facadeentry
+    elif self.args["inputs"][input]["facadeexit"]>360:
+      helper=self.args["inputs"][input]["facadeexit"]-360
+      if azimuth<=helper or azimuth >= self.args["inputs"][input]["facadeentry"]:
+        sun=True
+      else:
+        sun=False
+    #Check if Azimuth is between facadeentry and facadeexit
+    else:
+      if azimuth>=self.args["inputs"][input]["facadeentry"] and azimuth<=self.args["inputs"][input]["facadeexit"]:
+        sun=True
+      else:
+        sun=False
+    #self.debug("Sun: %s",sun)
+    #in sun
+    if sun:
+      if elevation <= 10:
+        value=self.args["inputs"][input]["elevation_lt10"] if int(self.args["inputs"][input]["elevation_lt10"]) else 100
+      elif elevation <= 20:
+        value=self.args["inputs"][input]["elevation_10to20"] if int(self.args["inputs"][input]["elevation_10to20"]) else 100
+      elif elevation <= 30:
+        value=self.args["inputs"][input]["elevation_20to30"] if int(self.args["inputs"][input]["elevation_20to30"]) else 100
+      elif elevation <= 40:
+        value=self.args["inputs"][input]["elevation_30to40"] if int(self.args["inputs"][input]["elevation_30to40"]) else 100
+      elif elevation <= 50:
+        value=self.args["inputs"][input]["elevation_40to50"] if int(self.args["inputs"][input]["elevation_40to50"]) else 100
+      elif elevation <= 60:
+        value=self.args["inputs"][input]["elevation_50to60"] if int(self.args["inputs"][input]["elevation_50to60"]) else 100
+      else:
+        value=self.args["inputs"][input]["elevation_gt60"] if int(self.args["inputs"][input]["elevation_gt60"]) else 100
+    #in shadow
+    elif self.getConfigValue(self.args["inputs"][input],"setIfInShadow",False):
+      value = self.getConfigValue(self.args["inputs"][input],"shadow",0)
+      self.debug("Set in Shadow: %s",value)
+      sun=True
+    self.debug("Set height to: %s",value)
+    return value, sun
+
+  def auto_shadow_callback (self,kwargs):
+    self.debug("auto_shadow Callback Priority:" )
+    self.debug("Priority: " + str(kwargs))
+    self.debug("Attribute:" )
