@@ -180,101 +180,7 @@ class PrioritySwitch(hass.Hass):
           self.args["inputs"][entity]["auto_off_running"]=None
           priority=priority+1
           self.debug("Input data: %s",self.args["inputs"][entity])
-          # #### OLD
-          # #special case input with auto_shade
           
-          # self.debug("auto_shade: %s","auto_shade" in self.args["inputs"][entity])
-          # if "auto_shade" in self.args["inputs"][entity] and self.args["inputs"][entity]["auto_shade"]: # auto shade
-          #   #self.azimut=self.args["inputs"][entity]["azimut"]
-          #   #self.elevation=self.args["inputs"][entity]["elevation"]
-          #   #self.buildingDeviation=self.args["inputs"][entity]["buildingDeviation"]
-          #   #self.offset_entry=self.args["inputs"][entity]["offset_entry"]
-          #   #self.offset_exit=self.args["inputs"][entity]["offset_exit"]
-          #   #self.setIfInShadow= self.args["inputs"][entity]["setIfInShadow"]
-          #   #self.shadow= self.getConfigValue(self.args["inputs"][entity],"shadow")
-          #   #self.debug("Shadow: %s", self.getConfigValue(self.args["inputs"][entity],"shadow"))
-          #   # self.elevation_lt10= self.args["inputs"][entity]["elevation_lt10"]
-          #   # self.elevation_10to20= self.args["inputs"][entity]["elevation_10to20"]
-          #   # self.elevation_20to30= self.args["inputs"][entity]["elevation_20to30"]
-          #   # self.elevation_30to40= self.args["inputs"][entity]["elevation_30to40"]
-          #   # self.elevation_40to50= self.args["inputs"][entity]["elevation_40to50"]
-          #   # self.elevation_50to60= self.args["inputs"][entity]["elevation_50to60"]
-          #   # self.elevation_gt60= self.args["inputs"][entity]["elevation_gt60"]
-            
-          #   ### Is static control?
-          #   if not self.onoff2bool(self.args["inputs"][entity]["control"]) is None:
-          #     self.args["inputs"][entity]["control_static"]=self.args["inputs"][entity]["control"]
-          #     self.args["inputs"][entity]["control"]=False
-          #   else:
-          #     self.args["inputs"][entity]["control_static"]=self.onoff2bool(self.args["inputs"][entity]["control"])
-          #     self.args["inputs"][entity]["active"]=self.onoff2bool(self.args["inputs"][entity]["control"])
-          #     self.args["inputs"][entity]["control"]=True
-          #   self.args["inputs"][entity]["facadeentry"]=self.args["inputs"][entity]["buildingDeviation"] + self.args["inputs"][entity]["offset_entry"] if int(self.args["inputs"][entity]["offset_entry"]) else -90
-          #   self.args["inputs"][entity]["facadeexit"]=self.args["inputs"][entity]["buildingDeviation"] + self.args["inputs"][entity]["offset_exit"] if int(self.args["inputs"][entity]["offset_entry"]) else 90
-          #   # in Shade mode value is considered static
-          #   self.args["inputs"][entity]["value_static"]=True
-
-
-          #   self.control_static.append(self.args["inputs"][entity]["control"])
-          #   self.control.append(False)
-            
-          #   #self.args["inputs"][entity]["sunhandle"]=self.listen_state(self.sun_callback, entity_id="sun.sun", attribute="all",priority=priority,entity=entity)
-          #   self.value.append(None)
-          #   self.value_static.append(True)    
-          #   self.listen_sun(entity,priority)
-          #   self.listen_state(self.callback, entity_id=self.args["inputs"][entity]["control"],priority=priority,control=True)
-          #   self.debug("Args: %s", self.args["inputs"][entity])
-            
-          #   #self.run_every(self.auto_shadow_callback,"now", 60)
-
-          # ### If control is  a static value save the entity
-          # elif not self.onoff2bool(self.args["inputs"][entity]["control"]) is None:
-          #     self.debug("Input '" + entity + "' is static " + str(self.args["inputs"][entity]["control"]))
-          #     self.control_static.append(self.onoff2bool(self.args["inputs"][entity]["control"]))
-          #     self.control.append(True)
-          #     ### Is static control? 
-          #     self.args["inputs"][entity]["control_static"]=self.onoff2bool(self.args["inputs"][entity]["control"])
-          #     self.args["inputs"][entity]["active"]=self.onoff2bool(self.args["inputs"][entity]["control"])
-          #     self.args["inputs"][entity]["control"]=True
-          # ### Control is  not a static value
-          # else:
-          #     if self.entity_exists(self.args["inputs"][entity]["control"]):
-          #         self.listen_state(self.callback, entity_id=self.args["inputs"][entity]["control"],priority=priority,control=True)
-          #         self.control_static.append(self.args["inputs"][entity]["control"])
-          #         self.control.append(False)
-          #     else:
-          #         self.debug("'" + self.args["inputs"][entity]["control"] + "' is an invalid entity")
-          #         self.control_static.append(False)
-          #         self.control.append(True)
-          # #add Value
-          # if isinstance(self.args["inputs"][entity]["value"],int) or isinstance(self.args["inputs"][entity]["value"],float) or not self.entity_exists(self.args["inputs"][entity]["value"]):
-          #     if self.args["inputs"][entity]["value"]==None or str(self.args["inputs"][entity]["value"]).lower()=='none':
-          #       self.debug("None Value found")
-          #       self.value.append(None)
-          #       self.value_static.append(True)          
-          #     else:
-          #       self.debug("Input '" + entity + "' is using static value: " + str(self.args["inputs"][entity]["value"]))
-          #       self.value.append(self.args["inputs"][entity]["value"])
-          #       self.value_static.append(True)          
-          # else:
-          #     self.listen_state(self.callback, entity_id=self.args["inputs"][entity]["value"],priority=priority,control=False)
-          #     self.value.append(self.args["inputs"][entity]["value"])
-          #     self.value_static.append(False)
-          # #add auto off
-          # if "auto_off" in self.args["inputs"][entity] and isinstance(self.args["inputs"][entity]["auto_off"],int):
-          #     self.auto_off.append(self.args["inputs"][entity]["auto_off"])
-          #     self.debug("Auto off in %s s", self.args["inputs"][entity]["auto_off"])
-          # else:
-          #     self.auto_off.append(None)
-          # self.auto_off_running.append(None)
-          # #add auto on
-          # if "auto_on" in self.args["inputs"][entity] and isinstance(self.args["inputs"][entity]["auto_on"],int):
-          #     self.auto_on.append(self.args["inputs"][entity]["auto_on"])
-          #     self.debug("Auto on in %s s", self.args["inputs"][entity]["auto_on"])
-          # else:
-          #     self.auto_on.append(None)
-          # self.auto_on_running.append(None)
-          # priority=priority+1
               
       # self.debug("Control : %s", self.control)
       # self.debug("Control Static: %s", self.control_static)
@@ -344,42 +250,7 @@ class PrioritySwitch(hass.Hass):
     else:
       self.debug("All Controls are off!")
       return None
-  # OLD
-  # def findHighestActivPriority(self):
-  #   x=self.maxPriority
-  #   found=False
-  #   while x >= 0:
-  #       self.debug("Priority: " + str(x))
-  #       self.debug("Static: " + str(self.control[x]))
-  #       if self.control[x]:
-  #         self.debug("Control Static Value: " + self.priorityName[x] + " = " + str(self.control_static[x]))
-  #         if self.control_static[x]:
-  #           self.debug("true")
-  #           found=True
-  #           break
-  #       else:
-  #         self.debug("Dynamic Value: "  + self.priorityName[x] + " = " + self.get_state(entity_id=self.control_static[x]))
-  #         if self.onoff2bool(self.get_state(entity_id=self.control_static[x])):
-  #           self.debug("True")
-  #           found=True
-  #           break
-  #       x -=1
-  #   if found:
-  #     self.debug("Highest Active Priority: %s", x)
-  #     return x
-  #   else:
-  #     self.debug("All Controls are off!")
-  #     return None
 
-#OLD
-  # def getValueFromPriority(self,priority):
-  #   #use Static Value
-  #   if self.value_static[priority]:
-  #     self.debug("Static Value: %s", self.value[priority])
-  #     return self.value[priority]
-  #   else:
-  #     self.debug("Dynamic Value: %s", self.get_state(entity_id=self.value[priority]))
-  #     return self.get_state(entity_id=self.value[priority])
 
   def sendValue(self, value, priority):
     self.debug("Value to send: %s, Priority: %s", value, priority)
