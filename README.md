@@ -22,7 +22,7 @@ Use [HACS](https://github.com/hacs/integration) or [download](https://github.com
 ### Example App Configuration
 
 Add your configuration to appdaemon/apps/apps.yaml, an example with two rooms is below.
-
+The first sample is used for central venting of the house, the second one is a sample on how to automate shutters/covers.
 ```yaml
 
 venting:
