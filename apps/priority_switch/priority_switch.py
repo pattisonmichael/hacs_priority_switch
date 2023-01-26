@@ -126,7 +126,7 @@ class PrioritySwitch(hass.Hass):
       if not self.entity_exists(self.args["output"]) and not self.args["output_sequence"]:
         self.debug("No valid output defined: %s",self.args["output"])
         return
-      if self.args["output_sequence"]:
+      if "output_sequence" in self.args and self.args["output_sequence"]:
         self.output_sequence = self.args["output_sequence"]
       for entity in self.args["inputs"]:
           # save entity name
@@ -193,17 +193,17 @@ class PrioritySwitch(hass.Hass):
       # self.debug("Auto On: %s", self.auto_on)
       # self.debug("Auto Off: %s", self.auto_off)
       
-    if self.args["status_entity"]:
+    if "status_entity" in self.args and self.args["status_entity"]:
       self.status_entity=self.get_entity(self.args["status_entity"])
       self.updateStatus("init",{"current":"init","value": None,"device":None,"timestamp":None})
     else:
       self.status_entity = None
-    if self.args["initial_run"]:
+    if "initial_run" in self.args and self.args["initial_run"]:
       self.debug("Initial run requested")
       self.run('on',0)
       self.debug(self.name)
 #      self.status_entity = self.add("priorityswitch." + self.name,state="init", attributes={"last_run": datetime.now().time})
-    if self.args["detect_manual"]:
+    if "detect_manual" in self.args and self.args["detect_manual"]:
       self.ad = self.get_ad_api()
       #self.status_entity = self.add("priorityswitch." + self.name,state="init", attributes={"last_run": "1234"})
       self.ad.listen_event(self.event_callback,"state_changed",entity_id = self.args["output"])
