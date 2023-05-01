@@ -117,6 +117,44 @@ bedroom_shutter:
   automation_pause: 120
   initial_run: True
   debug: False
+
+  hallway_shutter:
+  module: priority_switch
+  class: PrioritySwitch
+  inputs:
+    open:
+      control: 'On'
+      value: '100'
+    night:
+      control: input_boolean.shutters_closed_for_night
+      value: 0
+    frost:
+      control: input_boolean.cover_alert_frost
+      value: '10'
+    sleepmode:
+      control_use_tempate: true
+      control_template_entities:
+        - ent1
+        - ent2
+      control_template: ''
+      value: '0'
+    manual:
+      control: input_boolean.manual
+      value: input_number.manual_value
+      auto_off: 120
+    alarm:
+      control: input_boolean.cover_alert_alarm
+      value: '100'
+
+  output: cover.hallway
+  output_sequence: '{"cover/set_cover_position": {"entity_id": "cover.hallway", "position": "%VALUE%"}}'
+  status_entity: input_text.cover_status_hallway
+  enabled: True
+  deadtime: 30
+  detect_manual: True
+  automation_pause: 120
+  initial_run: True
+  debug: False
 ```
 
 ## Configuration Options
@@ -145,6 +183,9 @@ key | options | type | default | description
 -- | -- | -- | -- | --
 `priority_label` | False | list | | Not important for the functionality, only order matters. Top has lowest priority. This is just a name and not a parameter. The name will also be used for the Status Entity to track the current mode.
 `control` | False | string | | Either `'on'`, `'off'` or a boolean switch entity name
+`control_use_tempate` | True | boolean | False | If true ignores `control` and enables template processing
+`control_template_entities` | True | list | | List of entities that should trigger rendering of template
+`control_template` | True | string | | The template to render for control
 `value` | False | string | | Either a valid HA Entity or a static value to be send to the output.
 `auto_off` | True | int | | Amount of seconds after a control entity is switched off again after it was switched on.
 `auto_on` | True | int | | Amount of seconds after a control entity is switched on again after it was switched off.

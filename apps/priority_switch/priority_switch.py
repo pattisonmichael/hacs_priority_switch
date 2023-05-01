@@ -93,32 +93,7 @@ class PrioritySwitch(hass.Hass):
 #    self.log("Test WARNING", level="WARNING")
 #    self.log("Test ERROR", level="ERROR")
 #    self.log("Test DEBUG", level="DEBUG")
-    # self.control=[]
-    # self.control_static=[]
-    # self.value=[]
-    # self.value_static=[]
-    # self.priorityName=[]
-    # self.auto_off=[]
-    # self.auto_off_running=[]
-    # self.auto_on=[]
-    # self.auto_on_running=[]
     self.lastValue=None
-    # self.output_sequence=None
-    # self.auto_shade=False
-    # self.azimut=None
-    # self.elevation=None
-    # self.buildingDeviation=None
-    # self.offset_entry=None
-    # self.offset_exit=None
-    # self.setIfInShadow= False
-    # self.shadow= 0
-    # self.elevation_lt10= 0
-    # self.elevation_10to20= 0
-    # self.elevation_20to30= 102
-    # self.elevation_30to40= 153
-    # self.elevation_40to50= 153
-    # self.elevation_50to60= 204
-    # self.elevation_gt60= 204
     priority=0
     self.deadtime = datetime.now()
     self.automation_block = datetime.now()
@@ -139,8 +114,19 @@ class PrioritySwitch(hass.Hass):
           #Add Control
           #self.priorityName.append(entity)
           self.debug("Input: %s",entity)
+          ### Check if Control is using templating
+          if "control_use_template" in self.args["inputs"][entity] and bool(self.args["inputs"][entity]["control_use_template"]) is True:
+              self.debug("Input '" + entity + "' is using Control template")
+              self.debug("Input '" + entity + "' is using Control Entities: " + str(self.args["inputs"][entity]["control_template_entities"]))
+              self.debug("Input '" + entity + "' is using Control Template: " + str(self.args["inputs"][entity]["control_template"]))
+              res=self.render_template(str(self.args["inputs"][entity]["control_template"]))
+              self.debug("Input '" + entity + "' is Control Template renders to: " + str(res))
+              self.args["inputs"][entity]["active"]=res
+              for ent in self.args["inputs"][entity]["control_template_entities"]:
+                #self.debug(ent)
+                self.listen_state(self.callback, entity_id=ent,priority=priority,input=entity,control=True)
           ### If control is  a static value save the entity
-          if not self.onoff2bool(self.args["inputs"][entity]["control"]) is None:
+          elif not self.onoff2bool(self.args["inputs"][entity]["control"]) is None:
               self.debug("Input '" + entity + "' is static " + str(self.args["inputs"][entity]["control"]))
               self.args["inputs"][entity]["active"]=self.onoff2bool(self.args["inputs"][entity]["control"])
           ### Control is  not a static value
@@ -318,14 +304,10 @@ class PrioritySwitch(hass.Hass):
 
   def callback(self, entity, attribute, old, new, kwargs):
     self.debug("Callback Priority: %s, Priority: %s, Attributes: %s, Old: %s, New: %s, kwargs: %s",entity,kwargs["priority"], attribute, old, new, kwargs)
-    #self.debug("Priority: " + str(kwargs["priority"]))
-    #self.debug("Attribute:" + attribute)
-    #self.debug("Old:" + old)
-    #self.debug("New:" + new)
-    #self.debug("Control: %s", kwargs["control"])
-    #self.debug("kwargs: %s", kwargs)
-    #input = self.getInputByIndex(kwargs["priority"])
     input=self.args["inputs"][kwargs["input"]]
+    if "control_use_template" in self.args["inputs"][kwargs["input"]] and bool(self.args["inputs"][kwargs["input"]]["control_use_template"]) is True:
+      new=self.render_template(self.args["inputs"][kwargs["input"]]["control_template"])
+      self.debug("Template Control, Rendering Template: " + str(new))
     input["active"]=self.onoff2bool(new)
     self.debug("Input data: %s", input)
     if "auto_shade" in input:
