@@ -306,9 +306,12 @@ class PrioritySwitch(hass.Hass):
     self.debug("Callback Priority: %s, Priority: %s, Attributes: %s, Old: %s, New: %s, kwargs: %s",entity,kwargs["priority"], attribute, old, new, kwargs)
     input=self.args["inputs"][kwargs["input"]]
     if "control_use_template" in self.args["inputs"][kwargs["input"]] and bool(self.args["inputs"][kwargs["input"]]["control_use_template"]) is True:
-      new=self.render_template(self.args["inputs"][kwargs["input"]]["control_template"])
+      input["active"]=self.render_template(self.args["inputs"][kwargs["input"]]["control_template"])
       self.debug("Template Control, Rendering Template: " + str(new))
-    input["active"]=self.onoff2bool(new)
+    #elif input["dynamic"]:
+    #  self.debug("Dynamic Control: " + str(self.get_state(entity_id=self.args["inputs"][entity]["control"])))
+    #  input["active"]=self.onoff2bool(self.get_state(entity_id=self.args["inputs"][entity]["control"]))
+    #input["active"]=self.onoff2bool(new)
     self.debug("Input data: %s", input)
     if "auto_shade" in input:
       if new=="on":
