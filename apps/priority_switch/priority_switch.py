@@ -129,12 +129,14 @@ class PrioritySwitch(hass.Hass):
           elif not self.onoff2bool(self.args["inputs"][entity]["control"]) is None:
               self.debug("Input '" + entity + "' is static " + str(self.args["inputs"][entity]["control"]))
               self.args["inputs"][entity]["active"]=self.onoff2bool(self.args["inputs"][entity]["control"])
+              self.args["inputs"][entity]["control_static"]=True
           ### Control is  not a static value
           else:
               ### If entity exists register callback and get current value
               if self.entity_exists(self.args["inputs"][entity]["control"]):
                   self.listen_state(self.callback, entity_id=self.args["inputs"][entity]["control"],priority=priority,input=entity,control=True)
                   self.args["inputs"][entity]["active"]=self.onoff2bool(self.get_state(entity_id=self.args["inputs"][entity]["control"]))
+                  self.args["inputs"][entity]["control_static"]=False
               else:
                   self.debug("'" + self.args["inputs"][entity]["control"] + "' is an invalid entity")
                   self.args["inputs"][entity]["active"]=False
@@ -308,10 +310,11 @@ class PrioritySwitch(hass.Hass):
     if "control_use_template" in self.args["inputs"][kwargs["input"]] and bool(self.args["inputs"][kwargs["input"]]["control_use_template"]) is True:
       input["active"]=self.render_template(self.args["inputs"][kwargs["input"]]["control_template"])
       self.debug("Template Control, Rendering Template: " + str(new))
-    #elif input["dynamic"]:
-    #  self.debug("Dynamic Control: " + str(self.get_state(entity_id=self.args["inputs"][entity]["control"])))
-    #  input["active"]=self.onoff2bool(self.get_state(entity_id=self.args["inputs"][entity]["control"]))
-    #input["active"]=self.onoff2bool(new)
+    elif input["control_static"] == False:
+      self.debug("Dynamic Control: " + str(self.get_state(entity_id=self.args["inputs"][kwargs["input"]]["control"])))
+      input["active"]=self.onoff2bool(self.get_state(entity_id=self.args["inputs"][kwargs["input"]]["control"]))
+    #else:
+    #  input["active"]=self.onoff2bool(new)
     self.debug("Input data: %s", input)
     if "auto_shade" in input:
       if new=="on":
