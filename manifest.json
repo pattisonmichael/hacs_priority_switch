@@ -1,0 +1,15 @@
+{
+  "domain": "priorityswitch",
+  "name": "Priority Switch",
+  "codeowners": [
+    "@pattisonmichael"
+  ],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://www.home-assistant.io/integrations/priorityswitch",
+  "homekit": {},
+  "iot_class": "calculated",
+  "requirements": [],
+  "ssdp": [],
+  "zeroconf": []
+}

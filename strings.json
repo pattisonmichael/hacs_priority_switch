@@ -1,0 +1,121 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Main Menu",
+        "description": "Choose how to setup the switch.",
+        "data": {
+          "host": "[%key:common::config_flow::data::host%]",
+          "username": "[%key:common::config_flow::data::username%]",
+          "password": "[%key:common::config_flow::data::password%]",
+          "switch_name": "Switch Name",
+          "output": "Output Name",
+          "output_sequence": "Output Sequence",
+          "status_entity": "Status Entity",
+          "enabled": "Enabled",
+          "deadtime": "Deadtime",
+          "detect_manual": "Detect Manual",
+          "automation_pause": "Automation Pause",
+          "initial_run": "Initial Run",
+          "debug": "Debug",
+          "mainmenu": "Main Menu"
+        }
+      },
+      "basic": {
+        "title": "Basic Setup",
+        "description": "You need to fill in all field. For advanced options you can choose Advanced Setup from the main menu.",
+        "data": {
+          "switch_name": "Switch Name",
+          "output": "Output Name",
+          "output_sequence": "Output Sequence",
+          "status_entity": "Status Entity",
+          "status_entity_icon": "Status Entity Icon",
+          "enabled": "Enabled"
+        }
+      },
+      "add": {
+        "title": "Input {input_name} Step 1/2",
+        "description": "Here you can define all properties for an input. Not all values are required and some are mutual exclusive!",
+        "data": {
+          "name": "Input Name",
+          "priority": "Priority of Input (Higher = More Important)",
+          "control_type": "Control the Input, Can be True/False to set it permanently or point to a boolean entity to have it dynamic.",
+          "control_entity": "The Entity to control this input. Only required if set Control Type to Entity above.",
+          "value_type": "The type of Input you want to use.",
+          "value": "The value the Input should send. Use this to send a fixed value. Only one can be used other should be empty (Value/Value Entity/Value Template)",
+          "value_entity": "The entity that should be used to get the value from to send. Only one can be used other should be empty (Value/Value Entity/Value Template)",
+          "value_template": "The value template that should be used to get the value from to send. Only one can be used other should be empty (Value/Value Entity/Value Template)",
+          "auto_shade": "Enable this to activate cover control by sun. You need to fill in all below configuration to use this!",
+          "azimut": "The Azimut when the cover will be in sun",
+          "elevation": "The Elevation when the cover will be in sun",
+          "buildingDeviation": "The deviation of the building (you can think of it like which side of the building)",
+          "offset_entry": "An offset for when we conside the need to have shadow (-90 to 0) and the sun is entering the window.",
+          "offset_exit": "An offset for when we conside the need to have shadow (0 to 90) and the sun is leaving the window.",
+          "updateInterval": "How often should we recalculate in minutes. Have this too small will make the cover move constantly!",
+          "sun_entity": "The entity we use to track the sun. Usually sun.sun",
+          "setIfInShadow": "Inverts the function, only triggers if we consider the window to be in the shadow",
+          "shadow": "Position to send when in Shadow (0)",
+          "elevation_lt10": "Position to send when elevation < 10 (0)",
+          "elevation_10to20": "Position to send when in elevation between 10 and 20 (0)",
+          "elevation_20to30": "Position to send when in elevation between 20 and 30 (0)",
+          "elevation_30to40": "Position to send when in elevation between 30 and 40 (0)",
+          "elevation_40to50": "Position to send when in elevation between 40 and 50 (0)",
+          "elevation_50to60": "Position to send when in elevation between 50 and 60 (0)",
+          "elevation_gt60": "Position to send when in elevation > 60 (0)"
+        }
+      },
+      "add_input_fixed": {
+        "title": "Input {input_name} Step 2/2",
+        "description": "Here you can define the fixed value for an input.",
+        "data": {
+          "value": "The value the Input should send. Use this to send a fixed value."
+        }
+      },
+      "add_input_entity": {
+        "title": "Input {input_name} Step 2/2",
+        "description": "Here you can define the value entity for an input.",
+        "data": {
+          "value_entity": "The entity that should be used to get the value from to send."
+        }
+      },
+      "add_input_template": {
+        "title": "Input {input_name} Step 2/2",
+        "description": "Here you can define the template for an input.",
+        "data": {
+          "value_template": "The value template that should be used to get the value from to send."
+        }
+      },
+      "add_input_sun": {
+        "title": "Input {input_name} Step 2/2",
+        "description": "Here you can define the settings for an input that is tracking the sun.",
+        "data": {
+          "auto_shade": "Enable this to activate cover control by sun. You need to fill in all below configuration to use this!",
+          "azimut": "The Azimut when the cover will be in sun",
+          "elevation": "The Elevation when the cover will be in sun",
+          "buildingDeviation": "The deviation of the building (you can think of it like which side of the building)",
+          "offset_entry": "An offset for when we conside the need to have shadow (-90 to 0) and the sun is entering the window.",
+          "offset_exit": "An offset for when we conside the need to have shadow (0 to 90) and the sun is leaving the window.",
+          "updateInterval": "How often should we recalculate in minutes. Have this too small will make the cover move constantly!",
+          "sun_entity": "The entity we use to track the sun. Usually sun.sun",
+          "setIfInShadow": "Inverts the function, only triggers if we consider the window to be in the shadow",
+          "shadow": "Position to send when in Shadow (0)",
+          "elevation_lt10": "Position to send when elevation < 10 (0)",
+          "elevation_10to20": "Position to send when in elevation between 10 and 20 (0)",
+          "elevation_20to30": "Position to send when in elevation between 20 and 30 (0)",
+          "elevation_30to40": "Position to send when in elevation between 30 and 40 (0)",
+          "elevation_40to50": "Position to send when in elevation between 40 and 50 (0)",
+          "elevation_50to60": "Position to send when in elevation between 50 and 60 (0)",
+          "elevation_gt60": "Position to send when in elevation > 60 (0)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
+      "invalid_auth": "[%key:common::config_flow::error::invalid_auth%]",
+      "unknown": "[%key:common::config_flow::error::unknown%]"
+    },
+    "abort": {
+      "already_configured": "[%key:common::config_flow::abort::already_configured_device%]"
+    }
+  }
+}
