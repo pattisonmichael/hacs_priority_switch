@@ -1,23 +1,40 @@
 """Config flow for Priority Switch integration."""
 from __future__ import annotations
-
+from collections.abc import Callable, Coroutine, Mapping
 import logging
 from typing import Any, Dict, Optional
 
 import voluptuous as vol
 
 from homeassistant import config_entries
+from homeassistant.components.binary_sensor import DOMAIN as BINARY_SENSOR_DOMAIN
+from homeassistant.components.input_boolean import DOMAIN as INPUT_BOOLEAN_DOMAIN
+from homeassistant.core import CALLBACK_TYPE
 
 # from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er, selector
-from homeassistant.components.binary_sensor import DOMAIN as BINARY_SENSOR_DOMAIN
-from homeassistant.components.input_boolean import DOMAIN as INPUT_BOOLEAN_DOMAIN
+from homeassistant.helpers import template as tp
+from homeassistant.components import websocket_api, template
+from homeassistant.const import CONF_NAME, CONF_STATE
 from .const import CONF_INPUTS, DOMAIN
+from homeassistant.exceptions import TemplateError
 
 _LOGGER = logging.getLogger(__name__)
+
+
+# def not_in_excluded_values(excluded_values):
+#     """Return a validator that checks if value is not in the excluded list."""
+
+#     def validate(value):
+#         """Validate that the value is not in the excluded list."""
+#         if value in excluded_values:
+#             raise vol.Invalid(f"The value {value} is not allowed.")
+#         return value
+
+#     return validate
 
 
 def insert_and_shift_up(d, new_key, new_value):
@@ -46,33 +63,6 @@ class PlaceholderHub:
     async def authenticate(self, username: str, password: str) -> bool:
         """Test if we can authenticate with the host."""
         return True
-
-
-async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, Any]:
-    """Validate the user input allows us to connect.
-
-    Data has the keys from STEP_USER_DATA_SCHEMA with values provided by the user.
-    """
-    # TODO validate the data can be used to set up a connection.
-
-    # If your PyPI package is not built with async, pass your methods
-    # to the executor:
-    # await hass.async_add_executor_job(
-    #     your_validate_func, data[CONF_USERNAME], data[CONF_PASSWORD]
-    # )
-
-    # hub = PlaceholderHub(data[CONF_HOST])
-
-    # if not await hub.authenticate(data[CONF_USERNAME], data[CONF_PASSWORD]):
-    #    raise InvalidAuth
-
-    # If you cannot connect:
-    # throw CannotConnect
-    # If the authentication is wrong:
-    # InvalidAuth
-
-    # Return info that you want to store in the config entry.
-    return {"title": "Name of the device"}
 
 
 def string_to_boolean(s: str):
@@ -137,12 +127,25 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
     return data
 
 
+@config_entries.HANDLERS.register(DOMAIN)
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Priority Switch."""
 
     VERSION = 1
     data: Optional[dict[str, Any]] = {}
     temp_input_priority = None  # to remember original priority of input while editing
+
+    VALUETYPE = [
+        selector.SelectOptionDict(value="fixed", label="Fixed Value"),
+        selector.SelectOptionDict(value="entity", label="Value Entity"),
+        selector.SelectOptionDict(value="template", label="Value Template"),
+        selector.SelectOptionDict(value="sun", label="Follow Sun"),
+    ]
+    CONTROLTYPE = [
+        selector.SelectOptionDict(value="True", label="True"),
+        selector.SelectOptionDict(value="False", label="False"),
+        selector.SelectOptionDict(value="entity", label="Control Entity"),
+    ]
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -234,7 +237,10 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 MAINMENU.append(
                     selector.SelectOptionDict(
                         value="input" + str(self.data[CONF_INPUTS][prio]["priority"]),
-                        label="Edit Input " + str(self.data[CONF_INPUTS][prio]["name"]),
+                        label="Edit Input "
+                        + str(prio)
+                        + ": "
+                        + str(self.data[CONF_INPUTS][prio]["name"]),
                     )
                 )
             MAINMENU.append(
@@ -257,6 +263,43 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             else True,
         )
 
+    async def async_step_del(self, user_input=None):
+        # Handle the device configuration submenu
+        if user_input is not None:
+            # Process the device configuration input and go back to the menu
+            # self.data.update(user_input)
+            if user_input["menu"] != "back":
+                self.data[CONF_INPUTS].pop(int(user_input.get("menu")[5:]))
+            self.temp_input_priority = None
+            return await self.async_step_menu()
+
+        MENU = []
+        for prio in self.data[CONF_INPUTS]:
+            MENU.append(
+                selector.SelectOptionDict(
+                    value="input" + str(self.data[CONF_INPUTS][prio]["priority"]),
+                    label="Delete Input "
+                    + str(prio)
+                    + ": "
+                    + str(self.data[CONF_INPUTS][prio]["name"]),
+                )
+            )
+        MENU.append(selector.SelectOptionDict(value="back", label="Previous Menu"))
+        # Show the device configuration form
+        return self.async_show_form(
+            step_id="del",
+            last_step=False,
+            data_schema=vol.Schema(
+                {
+                    vol.Required("menu"): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=MENU, mode=selector.SelectSelectorMode.LIST
+                        ),
+                    )
+                }
+            ),
+        )
+
     async def async_step_add(self, user_input=None):
         # Handle the device configuration submenu
         if user_input is not None:
@@ -270,10 +313,10 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             elif self.temp_input_priority is None:  # Add a new one
                 self.data[CONF_INPUTS][user_input["priority"]] = user_input
             else:  # Reorder
-                newInputs = insert_and_shift_up(
+                insert_and_shift_up(
                     self.data[CONF_INPUTS], user_input["priority"], user_input
                 )
-                self.data[CONF_INPUTS] = newInputs
+                # self.data[CONF_INPUTS] = newInputs
             self.temp_input_priority = user_input["priority"]
             if user_input["value_type"] == "fixed":
                 return await self.async_step_add_input_fixed(user_input)
@@ -286,85 +329,58 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             user_input = await validate_input(self.hass, user_input)
             self.temp_input_priority = None
             return await self.async_step_menu()
-        VALUETYPE = [
-            selector.SelectOptionDict(value="fixed", label="Fixed Value"),
-            selector.SelectOptionDict(value="entity", label="Value Entity"),
-            selector.SelectOptionDict(value="template", label="Value Template"),
-            selector.SelectOptionDict(value="sun", label="Follow Sun"),
-        ]
-        CONTROLTYPE = [
-            selector.SelectOptionDict(value="True", label="True"),
-            selector.SelectOptionDict(value="False", label="False"),
-            selector.SelectOptionDict(value="entity", label="Control Entity"),
-        ]
-        if self.temp_input_priority is None:
-            # Define a schema for the "inputs" part of the configuration
-            INPUT_SCHEMA = vol.Schema(
-                {
-                    vol.Required("name"): str,
-                    vol.Required(
-                        "priority", default=max(self.data[CONF_INPUTS], default=1) + 1
-                    ): vol.All(
-                        selector.NumberSelector(
-                            selector.NumberSelectorConfig(
-                                min=1, max=20, mode=selector.NumberSelectorMode.BOX
-                            ),
-                        ),
-                        vol.Coerce(int),
+
+        i = (
+            self.data[CONF_INPUTS][int(self.temp_input_priority)]
+            if len(self.data[CONF_INPUTS]) > 0
+            else {}
+        )
+        INPUT_SCHEMA = vol.Schema(
+            {
+                vol.Required("name", default=i.get("name")): str,
+                vol.Required(
+                    "priority",
+                    default=i.get(
+                        "priority", max(self.data[CONF_INPUTS], default=0) + 1
                     ),
-                    vol.Required("control_type"): selector.SelectSelector(
-                        selector.SelectSelectorConfig(
-                            options=CONTROLTYPE,
-                            mode=selector.SelectSelectorMode.LIST,
+                ): vol.All(
+                    selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=1, max=20, mode=selector.NumberSelectorMode.BOX
                         ),
                     ),
-                    vol.Optional("control_entity"): selector.EntitySelector(
+                    vol.Coerce(int),
+                    # vol.NotIn(list(self.data[CONF_INPUTS].keys())),
+                ),
+                vol.Required(
+                    "control_type", default=i.get("control_type")
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=self.CONTROLTYPE,
+                        mode=selector.SelectSelectorMode.LIST,
+                    ),
+                ),
+                vol.Optional(
+                    "control_entity", default=i.get("control_entity")
+                ): vol.Any(
+                    None,
+                    selector.EntitySelector(
                         selector.EntitySelectorConfig(
                             domain=[BINARY_SENSOR_DOMAIN, INPUT_BOOLEAN_DOMAIN]
                         )
                     ),
-                    vol.Required("value_type"): selector.SelectSelector(
-                        selector.SelectSelectorConfig(
-                            options=VALUETYPE,
-                            mode=selector.SelectSelectorMode.LIST,
-                        ),
+                ),
+                vol.Required(
+                    "value_type", default=i.get("value_type")
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=self.VALUETYPE,
+                        mode=selector.SelectSelectorMode.LIST,
                     ),
-                },
-                extra=vol.ALLOW_EXTRA,
-            )
-        else:  # Get previous Input data as new default
-            i = self.data[CONF_INPUTS][int(self.temp_input_priority)]
-            INPUT_SCHEMA = vol.Schema(
-                {
-                    vol.Required("name", default=i.get("name")): str,
-                    vol.Required("priority", default=i.get("priority")): (
-                        selector.NumberSelector(
-                            selector.NumberSelectorConfig(
-                                min=1, max=20, mode=selector.NumberSelectorMode.BOX
-                            ),
-                        ),
-                        vol.Coerce(int),
-                    ),
-                    vol.Required("control_type"): selector.SelectSelector(
-                        selector.SelectSelectorConfig(
-                            options=CONTROLTYPE,
-                            mode=selector.SelectSelectorMode.LIST,
-                        ),
-                    ),
-                    vol.Optional("control_entity"): selector.EntitySelector(
-                        selector.EntitySelectorConfig(
-                            domain=[BINARY_SENSOR_DOMAIN, INPUT_BOOLEAN_DOMAIN]
-                        )
-                    ),
-                    vol.Required("value_type"): selector.SelectSelector(
-                        selector.SelectSelectorConfig(
-                            options=VALUETYPE,
-                            mode=selector.SelectSelectorMode.DROPDOWN,
-                        ),
-                    ),
-                },
-                extra=vol.ALLOW_EXTRA,
-            )
+                ),
+            },
+            extra=vol.ALLOW_EXTRA,
+        )
         # Show the device configuration form
         return self.async_show_form(
             step_id="add",
@@ -457,87 +473,170 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     "name"
                 ]
             },
-            # preview=True,
+            preview="template",
         )
 
     async def async_step_add_input_sun(self, user_input=None):
         # Handle the device configuration submenu
-        if user_input.get("auto_shade", None) is not None:
+        if user_input.get("azimut", None) is not None:
             # Process the device configuration input and go back to the menu
             # self.data.update(user_input)
-            self.data[CONF_INPUTS][self.temp_input_priority].update(
-                {"auto_shade": True}
-            )
+            # self.data[CONF_INPUTS][self.temp_input_priority].update(
+            #     {"auto_shade": True}
+            # )
             self.data[CONF_INPUTS][self.temp_input_priority].update(user_input)
             self.temp_input_priority = None
             return await self.async_step_menu()
 
-        if self.temp_input_priority is None:
-            # Define a schema for the "inputs" part of the configuration
-            INPUT_SCHEMA = vol.Schema(
-                {
-                    #                    vol.Required("auto_shade"): bool,
-                    vol.Required("azimut"): int,
-                    vol.Required("elevation"): int,
-                    vol.Required("buildingDeviation"): int,
-                    vol.Required("offset_entry"): int,
-                    vol.Required("offset_exit"): int,
-                    vol.Required("updateInterval"): int,
-                    vol.Required("sun_entity"): str,
-                    vol.Required("setIfInShadow"): bool,
-                    vol.Required("shadow"): int,
-                    vol.Required("elevation_lt10"): int,
-                    vol.Required("elevation_10to20"): int,
-                    vol.Required("elevation_20to30"): int,
-                    vol.Required("elevation_30to40"): int,
-                    vol.Required("elevation_40to50"): int,
-                    vol.Required("elevation_50to60"): int,
-                    vol.Required("elevation_gt60"): int,
-                },
-                extra=vol.ALLOW_EXTRA,
-            )
-        else:  # Get previous Input data as new default
-            i = self.data[CONF_INPUTS][int(self.temp_input_priority)]
-            INPUT_SCHEMA = vol.Schema(
-                {
-                    #                    vol.Required("auto_shade", default=i.get("auto_shade")): bool,
-                    vol.Required("azimut", default=i.get("azimut")): int,
-                    vol.Required("elevation", default=i.get("elevation")): int,
-                    vol.Required(
-                        "buildingDeviation", default=i.get("buildingDeviation")
-                    ): int,
-                    vol.Required("offset_entry", default=i.get("offset_entry")): int,
-                    vol.Required("offset_exit", default=i.get("offset_exit")): int,
-                    vol.Required(
-                        "updateInterval", default=i.get("updateInterval")
-                    ): int,
-                    vol.Required("sun_entity", default=i.get("sun_entity")): str,
-                    vol.Required("setIfInShadow", default=i.get("setIfInShadow")): bool,
-                    vol.Required("shadow", default=i.get("shadow")): int,
-                    vol.Required(
-                        "elevation_lt10", default=i.get("elevation_lt10")
-                    ): int,
-                    vol.Required(
-                        "elevation_10to20", default=i.get("elevation_10to20")
-                    ): int,
-                    vol.Required(
-                        "elevation_20to30", default=i.get("elevation_20to30")
-                    ): int,
-                    vol.Required(
-                        "elevation_30to40", default=i.get("elevation_30to40")
-                    ): int,
-                    vol.Required(
-                        "elevation_40to50", default=i.get("elevation_40to50")
-                    ): int,
-                    vol.Required(
-                        "elevation_50to60", default=i.get("elevation_50to60")
-                    ): int,
-                    vol.Required(
-                        "elevation_gt60", default=i.get("elevation_gt60")
-                    ): int,
-                },
-                extra=vol.ALLOW_EXTRA,
-            )
+        # if self.temp_input_priority is None:
+        i = self.data[CONF_INPUTS][int(self.temp_input_priority)]
+        # Define a schema for the "inputs" part of the configuration
+        INPUT_SCHEMA = vol.Schema(
+            {
+                #                    vol.Required("auto_shade"): bool,
+                vol.Required("azimut", default=i.get("azimut")): vol.All(
+                    selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=0, max=360, mode=selector.NumberSelectorMode.BOX
+                        ),
+                    ),
+                    vol.Coerce(int),
+                ),
+                vol.Required("elevation", default=i.get("elevation")): vol.All(
+                    selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=-90, max=90, mode=selector.NumberSelectorMode.SLIDER
+                        ),
+                    ),
+                    vol.Coerce(int),
+                ),
+                vol.Required(
+                    "buildingDeviation", default=i.get("buildingDeviation", 0)
+                ): vol.All(
+                    selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=-90, max=90, mode=selector.NumberSelectorMode.SLIDER
+                        ),
+                    ),
+                    vol.Coerce(int),
+                ),
+                vol.Required("offset_entry", default=i.get("offset_entry", 0)): vol.All(
+                    selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=-90, max=0, mode=selector.NumberSelectorMode.SLIDER
+                        ),
+                    ),
+                    vol.Coerce(int),
+                ),
+                vol.Required("offset_exit", default=i.get("offset_exit", 0)): vol.All(
+                    selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=0, max=90, mode=selector.NumberSelectorMode.SLIDER
+                        ),
+                    ),
+                    vol.Coerce(int),
+                ),
+                vol.Required(
+                    "updateInterval", default=i.get("updateInterval", 10)
+                ): vol.All(
+                    selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=1, max=90, mode=selector.NumberSelectorMode.SLIDER
+                        ),
+                    ),
+                    vol.Coerce(int),
+                ),
+                vol.Required(
+                    "sun_entity", default=i.get("sun_entity", "sun.sun")
+                ): selector.EntitySelector(),
+                vol.Required(
+                    "setIfInShadow", default=i.get("setIfInShadow", False)
+                ): selector.BooleanSelector(),
+                vol.Optional("shadow", default=i.get("shadow")): vol.Any(
+                    None,
+                    vol.All(
+                        selector.NumberSelector(
+                            selector.NumberSelectorConfig(
+                                min=0, max=100, mode=selector.NumberSelectorMode.SLIDER
+                            ),
+                        ),
+                        vol.Coerce(int),
+                    ),
+                ),
+                vol.Required(
+                    "elevation_lt10", default=i.get("elevation_lt10", 0)
+                ): vol.All(
+                    selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=0, max=100, mode=selector.NumberSelectorMode.SLIDER
+                        ),
+                    ),
+                    vol.Coerce(int),
+                ),
+                vol.Required(
+                    "elevation_10to20", default=i.get("elevation_10to20", 0)
+                ): vol.All(
+                    selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=0, max=100, mode=selector.NumberSelectorMode.SLIDER
+                        ),
+                    ),
+                    vol.Coerce(int),
+                ),
+                vol.Required(
+                    "elevation_20to30", default=i.get("elevation_20to30", 50)
+                ): vol.All(
+                    selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=0, max=100, mode=selector.NumberSelectorMode.SLIDER
+                        ),
+                    ),
+                    vol.Coerce(int),
+                ),
+                vol.Required(
+                    "elevation_30to40", default=i.get("elevation_30to40", 50)
+                ): vol.All(
+                    selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=0, max=100, mode=selector.NumberSelectorMode.SLIDER
+                        ),
+                    ),
+                    vol.Coerce(int),
+                ),
+                vol.Required(
+                    "elevation_40to50", default=i.get("elevation_40to50", 50)
+                ): vol.All(
+                    selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=0, max=100, mode=selector.NumberSelectorMode.SLIDER
+                        ),
+                    ),
+                    vol.Coerce(int),
+                ),
+                vol.Required(
+                    "elevation_50to60", default=i.get("elevation_50to60", 80)
+                ): vol.All(
+                    selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=0, max=100, mode=selector.NumberSelectorMode.SLIDER
+                        ),
+                    ),
+                    vol.Coerce(int),
+                ),
+                vol.Required(
+                    "elevation_gt60", default=i.get("elevation_gt60", 100)
+                ): vol.All(
+                    selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=0, max=100, mode=selector.NumberSelectorMode.SLIDER
+                        ),
+                    ),
+                    vol.Coerce(int),
+                ),
+            },
+            extra=vol.ALLOW_EXTRA,
+        )
+
         # Show the device configuration form
         return self.async_show_form(
             step_id="add_input_sun",
@@ -653,6 +752,90 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="advanced",
             data_schema=ADVANCED_CONFIG_SCHEMA,
         )
+
+    @staticmethod
+    async def async_setup_preview(hass: HomeAssistant) -> None:
+        """Set up preview WS API."""
+        websocket_api.async_register_command(hass, ws_start_preview)
+
+    # async def async_step_preview(self, user_input):
+    #     """Handle the preview step."""
+    #     # Normally you would handle the preview logic here
+    #     # For this example, we'll just show the form again
+    #     return self.async_show_form(step_id="preview", data_schema=CONFIG_SCHEMA)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "template/start_preview",
+        vol.Required("flow_id"): str,
+        vol.Required("flow_type"): vol.Any("config_flow", "options_flow"),
+        vol.Required("user_input"): dict,
+    }
+)
+@callback
+def ws_start_preview(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Generate a preview based on the template provided in user input."""
+    user_input = msg["user_input"]
+    template_str = user_input.get("value_template")
+
+    try:
+        # Render the template with the provided string
+        if template_str is not None and tp.is_template_string(template_str):
+            tmpl = tp.Template(template_str, hass)
+
+            rendered_template = tmpl.async_render()
+            connection.send_message(
+                websocket_api.event_message(
+                    msg["id"],
+                    {
+                        "state": rendered_template,
+                        "attributes": {"friendly_name": "Template Preview:"},
+                    },
+                )
+            )
+
+    except TemplateError as ex:
+        # If there is an error in rendering the template, send the error message back
+        connection.send_message(
+            websocket_api.error_message(
+                msg["id"], "template_error", f"Error rendering template: {ex}"
+            )
+        )
+
+    # @callback
+    # def async_preview_updated(
+    #     state: str | None,
+    #     attributes: Mapping[str, Any] | None,
+    #     listeners: dict[str, bool | set[str]] | None,
+    #     error: str | None,
+    # ) -> CALLBACK_TYPE:
+    #     """Forward config entry state events to websocket."""
+    #     if error is not None:
+    #         connection.send_message(
+    #             websocket_api.event_message(
+    #                 msg["id"],
+    #                 {"error": error},
+    #             )
+    #         )
+    #         return
+    #     rendered_template = tp.render_complex(template_str)
+    #     connection.send_message(
+    #         websocket_api.event_message(
+    #             msg["id"],
+    #             {
+    #                 "attributes": attributes,
+    #                 "listeners": listeners,
+    #                 "state": rendered_template,
+    #             },
+    #         )
+    #     )
+
+    connection.send_result(msg["id"])
 
 
 class CannotConnect(HomeAssistantError):
