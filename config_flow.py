@@ -1,29 +1,22 @@
 """Config flow for Priority Switch integration."""
 from __future__ import annotations
-from collections.abc import Callable, Coroutine, Mapping
+
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 import voluptuous as vol
-from voluptuous_serialize import UNSUPPORTED, convert
 
 from homeassistant import config_entries
+from homeassistant.components import websocket_api
 from homeassistant.components.binary_sensor import DOMAIN as BINARY_SENSOR_DOMAIN
 from homeassistant.components.input_boolean import DOMAIN as INPUT_BOOLEAN_DOMAIN
-from homeassistant.core import CALLBACK_TYPE
-
-# from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResult
-from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers import entity_registry as er, selector
-from homeassistant.helpers import template as tp
-from homeassistant.components import websocket_api, template
-from homeassistant.const import CONF_NAME, CONF_STATE
-from .const import CONF_INPUTS, DOMAIN
-from homeassistant.exceptions import TemplateError
-from homeassistant.helpers import config_validation as cv
+from homeassistant.exceptions import HomeAssistantError, TemplateError
+from homeassistant.helpers import config_validation as cv, selector, template as tp
 from homeassistant.helpers.translation import async_get_translations
+
+from .const import CONF_INPUTS, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -42,19 +35,19 @@ def insert_and_shift_up(d, new_key, new_value):
     d[new_key] = new_value
 
 
-class PlaceholderHub:
-    """Placeholder class to make tests pass.
+# class PlaceholderHub:
+#     """Placeholder class to make tests pass.
 
-    TODO Remove this placeholder class and replace with things from your PyPI package.
-    """
+#     TO DO Remove this placeholder class and replace with things from your PyPI package.
+#     """
 
-    def __init__(self, host: str) -> None:
-        """Initialize."""
-        self.host = host
+#     def __init__(self, host: str) -> None:
+#         """Initialize."""
+#         self.host = host
 
-    async def authenticate(self, username: str, password: str) -> bool:
-        """Test if we can authenticate with the host."""
-        return True
+#     async def authenticate(self, username: str, password: str) -> bool:
+#         """Test if we can authenticate with the host."""
+#         return True
 
 
 def string_to_boolean(s: str):
@@ -154,7 +147,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
     data: Optional[dict[str, Any]] = {}
     temp_input_priority = None  # to remember original priority of input while editing
-
+    translations = None
     VALUETYPE = [
         selector.SelectOptionDict(value="fixed", label="Fixed Value"),
         selector.SelectOptionDict(value="entity", label="Value Entity"),
@@ -171,10 +164,21 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Handle the initial step."""
-        errors: dict[str, str] = {}
+        # errors: dict[str, str] = {}
         self.data[CONF_INPUTS] = {}
-        return await self.async_step_menu()
 
+        # get translastions
+        if self.translations is None:
+            language = self.hass.config.language
+            self.translations = await async_get_translations(
+                self.hass,
+                language=language,
+                integrations=[DOMAIN],
+                category="selector",
+                config_flow=True,
+            )
+
+        return await self.async_step_menu()
         # if user_input is not None:
         #     try:
         #         info = await validate_input(self.hass, user_input)
@@ -189,33 +193,29 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         #         return self.async_create_entry(title=info["title"], data=user_input)
 
     async def async_step_menu(self, user_input=None):
-        # Handle the initial menu selection
+        """Handle the initial menu selection."""
+
         if user_input is not None:
-            if user_input.get("mainmenu") == "basic":
-                return await self.async_step_basic()
-            elif user_input.get("mainmenu") == "advanced":
+            # if user_input.get("mainmenu") == "basic":
+            #     return await self.async_step_basic()
+            self.data["switch_name_friendly"] = user_input.get("switch_name_friendly")
+            self.data["enabled"] = user_input.get("enabled")
+            if user_input.get("mainmenu") == "advanced":
                 return await self.async_step_advanced()
             elif user_input.get("mainmenu") == "add":
                 return await self.async_step_add()
             elif user_input.get("mainmenu") == "del":
                 return await self.async_step_del()
             elif user_input.get("mainmenu") == "save":
+                self.data["switch_name"] = cv.slugify(self.data["switch_name_friendly"])
                 return self.async_create_entry(
-                    title=self.data["switch_name"], data=self.data
+                    title=self.data["switch_name_friendly"], data=self.data
                 )
             elif user_input.get("mainmenu")[:5] == "input":
                 self.temp_input_priority = user_input.get("mainmenu")[5:]
                 return await self.async_step_add()
         # If no input or not handled, show the menu again
         #########
-        language = self.hass.config.language
-        translations = await async_get_translations(
-            self.hass,
-            language=language,
-            integrations=[DOMAIN],
-            category="selector",
-            config_flow=True,
-        )
 
         # Use translated state names
         # for state in all_states:
@@ -224,19 +224,22 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         #     state.state = translations.get(key, state.state)
 
         #########
-        MAINMENU = [
+        MAINMENU = [  # pylint: disable=invalid-name
             # selector.SelectOptionDict(value="basic", label="Basic Setup"),
             # selector.SelectOptionDict(value="advanced", label="Advance Setup"),
-            selector.SelectOptionDict(value="basic", label="basic"),
+            # selector.SelectOptionDict(value="basic", label="basic"),
             selector.SelectOptionDict(value="advanced", label="advanced"),
         ]
+        ############
+
+        ############
         MAINMENU.append(selector.SelectOptionDict(value="add", label="add"))
         if len(self.data[CONF_INPUTS]) > 0:
             for prio in self.data[CONF_INPUTS]:
                 MAINMENU.append(
                     selector.SelectOptionDict(
                         value="input" + str(self.data[CONF_INPUTS][prio]["priority"]),
-                        label=translations.get(
+                        label=self.translations.get(
                             "component.priorityswitch.selector.mainmenu.options.input_"
                             + str(self.data[CONF_INPUTS][prio]["priority"])
                         )
@@ -244,7 +247,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     )
                 )
             MAINMENU.append(selector.SelectOptionDict(value="del", label="del"))
-            if self.data.get("name") is not None:
+            if self.data.get("switch_name_friendly") is not None:
                 MAINMENU.append(selector.SelectOptionDict(value="save", label="save"))
         description_placeholders = {}
         for prio in self.data[CONF_INPUTS]:
@@ -255,13 +258,20 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="menu",
             data_schema=vol.Schema(
                 {
-                    vol.Required("mainmenu"): selector.SelectSelector(
+                    vol.Required(
+                        "switch_name_friendly",
+                        default=self.data.get("switch_name_friendly"),
+                    ): selector.TextSelector(),
+                    vol.Optional(
+                        "enabled", default=self.data.get("enabled", True)
+                    ): selector.BooleanSelector(),
+                    vol.Required("mainmenu", default="add"): selector.SelectSelector(
                         selector.SelectSelectorConfig(
                             options=MAINMENU,
                             mode=selector.SelectSelectorMode.LIST,
                             translation_key="mainmenu",
                         ),
-                    )
+                    ),
                 }
             ),
             description_placeholders=description_placeholders,
@@ -271,7 +281,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     async def async_step_del(self, user_input=None):
-        # Handle the device configuration submenu
+        """Handle the device configuration submenu."""
         if user_input is not None:
             # Process the device configuration input and go back to the menu
             # self.data.update(user_input)
@@ -280,7 +290,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self.temp_input_priority = None
             return await self.async_step_menu()
 
-        MENU = []
+        MENU = []  # pylint: disable=invalid-name
         for prio in self.data[CONF_INPUTS]:
             MENU.append(
                 selector.SelectOptionDict(
@@ -305,7 +315,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     async def async_step_add(self, user_input=None):
-        # Handle the device configuration submenu
+        """Handle the input configuration submenu."""
         errors = {}
         if user_input is not None:
             # Process the device configuration input and go back to the menu
@@ -313,7 +323,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if len(val.get("errors", {})) == 0:
                 if user_input.get("control_type") in ["True", "False"] or (
                     user_input.get("control_type") == "entity"
-                    and not user_input.get("control_entity") is None
+                    and user_input.get("control_entity") is not None
                 ):  # validate if control_entity is required
                     if (
                         self.temp_input_priority is not None
@@ -354,7 +364,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is None:
             user_input = {}
 
-        CONTROL_ENTITY_SCHEMA = {
+        CONTROL_ENTITY_SCHEMA = {  # pylint: disable=invalid-name
             vol.Optional("control_entity", default=i.get("control_entity")): vol.Any(
                 None,
                 selector.EntitySelector(
@@ -365,7 +375,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             ),
         }
 
-        INPUT_SCHEMA_START = {
+        INPUT_SCHEMA_START = {  # pylint: disable=invalid-name
             vol.Optional("name", default=i.get("name")): vol.Any(
                 None,
                 selector.TextSelector(),
@@ -392,7 +402,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             ),
         }
 
-        INPUT_SCHEMA_END = {
+        INPUT_SCHEMA_END = {  # pylint: disable=invalid-name
             vol.Required("value_type", default=i.get("value_type")): vol.Any(
                 None,
                 selector.SelectSelector(
@@ -403,6 +413,12 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     )
                 ),
             ),
+            vol.Optional("auto_on", default=user_input.get("auto_on")): vol.Any(
+                None, selector.DurationSelector()
+            ),
+            vol.Optional("auto_off", default=user_input.get("auto_off")): vol.Any(
+                None, selector.DurationSelector()
+            ),
         }
         # Combine the dictionaries
         combined_schema_dict = {
@@ -412,7 +428,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         }
 
         # Create the Schema object with extra=ALLOW_EXTRA
-        INPUT_SCHEMA = vol.Schema(combined_schema_dict, extra=vol.ALLOW_EXTRA)
+        INPUT_SCHEMA = vol.Schema(combined_schema_dict, extra=vol.ALLOW_EXTRA)  # pylint: disable=invalid-name
         # Show the device configuration form
         return self.async_show_form(
             step_id="add",
@@ -429,7 +445,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     async def async_step_add_input_entity(self, user_input=None):
-        # Handle the device configuration submenu
+        """Handle the input entity configuration submenu."""
         if user_input.get("value_entity", None) is not None:
             # Process the device configuration input and go back to the menu
             # self.data.update(user_input)
@@ -440,7 +456,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if self.temp_input_priority is None:
             # Define a schema for the "inputs" part of the configuration
-            INPUT_SCHEMA = vol.Schema(
+            INPUT_SCHEMA = vol.Schema(  # pylint: disable=invalid-name
                 {
                     vol.Required("value_entity"): selector.EntitySelector(),
                 },
@@ -448,7 +464,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
         else:  # Get previous Input data as new default
             i = self.data[CONF_INPUTS][int(self.temp_input_priority)]
-            INPUT_SCHEMA = vol.Schema(
+            INPUT_SCHEMA = vol.Schema(  # pylint: disable=invalid-name
                 {
                     vol.Required(
                         "value_entity", default=i.get("value_entity", "")
@@ -469,7 +485,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     async def async_step_add_input_template(self, user_input=None):
-        # Handle the device configuration submenu
+        """Handle the input template configuration submenu."""
         if user_input.get("value_template", None) is not None:
             # Process the device configuration input and go back to the menu
             # self.data.update(user_input)
@@ -480,7 +496,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if self.temp_input_priority is None:
             # Define a schema for the "inputs" part of the configuration
-            INPUT_SCHEMA = vol.Schema(
+            INPUT_SCHEMA = vol.Schema(  # pylint: disable=invalid-name
                 {
                     vol.Required("value_template"): selector.TemplateSelector(),
                 },
@@ -488,7 +504,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
         else:  # Get previous Input data as new default
             i = self.data[CONF_INPUTS][int(self.temp_input_priority)]
-            INPUT_SCHEMA = vol.Schema(
+            INPUT_SCHEMA = vol.Schema(  # pylint: disable=invalid-name
                 {
                     vol.Required(
                         "value_template", default=i.get("value_template")
@@ -510,7 +526,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     async def async_step_add_input_sun(self, user_input=None):
-        # Handle the device configuration submenu
+        """Handle the input sun configuration submenu."""
         if user_input.get("azimut", None) is not None:
             # Process the device configuration input and go back to the menu
             # self.data.update(user_input)
@@ -523,7 +539,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         i = self.data[CONF_INPUTS][int(self.temp_input_priority)]
         # Define a schema for the "inputs" part of the configuration
-        INPUT_SCHEMA = vol.Schema(
+        INPUT_SCHEMA = vol.Schema(  # pylint: disable=invalid-name
             {
                 #                    vol.Required("auto_shade"): bool,
                 vol.Required("azimut", default=i.get("azimut")): vol.All(
@@ -682,7 +698,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     async def async_step_add_input_fixed(self, user_input=None):
-        # Handle the device configuration submenu
+        """Handle the input fixed configuration submenu."""
         if user_input.get("value", None) is not None:
             # Process the device configuration input and go back to the menu
 
@@ -692,7 +708,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if self.temp_input_priority is None:
             # Define a schema for the "inputs" part of the configuration
-            INPUT_SCHEMA = vol.Schema(
+            INPUT_SCHEMA = vol.Schema(  # pylint: disable=invalid-name
                 {
                     vol.Required("value"): str,
                 },
@@ -700,7 +716,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
         else:  # Get previous Input data as new default
             i = self.data[CONF_INPUTS][int(self.temp_input_priority)]
-            INPUT_SCHEMA = vol.Schema(
+            INPUT_SCHEMA = vol.Schema(  # pylint: disable=invalid-name
                 {
                     vol.Required("value", default=i.get("value")): str,
                 },
@@ -718,72 +734,31 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             },
         )
 
-    async def async_step_basic(self, user_input=None):
-        # Handle the device configuration submenu
-        if user_input is not None:
-            # Process the device configuration input and go back to the menu
-            self.data.update(user_input)
-            return await self.async_step_menu()
-
-        BASE_CONFIG_SCHEMA = vol.Schema(
-            {
-                vol.Required(
-                    "switch_name", default=self.data.get("switch_name")
-                ): selector.TextSelector(),
-                # vol.Required("output", default=self.data.get("output")): selector.TextSelector(),
-                # vol.Required(
-                #     "status_entity", default=self.data.get("status_entity","status")
-                # ): selector.TextSelector(),
-                # vol.Required(
-                #     "status_entity_icon", default=self.data.get("status_entity_icon")
-                # ): selector.IconSelector(),
-                vol.Optional(
-                    "enabled", default=self.data.get("enabled", True)
-                ): selector.BooleanSelector(),
-            },
-            extra=vol.ALLOW_EXTRA,
-        )
-        # Show the device configuration form
-        return self.async_show_form(
-            step_id="basic",
-            data_schema=BASE_CONFIG_SCHEMA,
-        )
-
     async def async_step_advanced(self, user_input=None):
-        # Handle the device configuration submenu
-        ADVANCED_CONFIG_SCHEMA = vol.Schema(
-            {
-                vol.Required(
-                    "switch_name", default=self.data.get("switch_name")
-                ): selector.TextSelector(),
-                # vol.Required("output", default=self.data.get("output")): selector.TextSelector(),
-                vol.Required("output_sequence"): selector.TemplateSelector(),
-                # vol.Required(
-                #     "status_entity", default=self.data.get("status_entity")
-                # ): selector.EntitySelector(),
-                # vol.Required(
-                #     "status_entity_icon", default=self.data.get("status_entity")
-                # ): selector.IconSelector(),
-                vol.Optional(
-                    "enabled", default=self.data.get("status_entity", True)
-                ): selector.BooleanSelector(),
-                vol.Optional(
-                    "deadtime", default={"hours": 0, "minutes": 0, "seconds": 30}
-                ): selector.DurationSelector(),
-                vol.Optional("detect_manual", default=True): selector.BooleanSelector(),
-                vol.Optional(
-                    "automation_pause", default={"hours": 2, "minutes": 0, "seconds": 0}
-                ): selector.DurationSelector(),
-                vol.Optional("initial_run", default=True): selector.BooleanSelector(),
-                vol.Optional("debug", default=True): selector.BooleanSelector(),
-            },
-            extra=vol.ALLOW_EXTRA,
-        )
+        """Handle the advanced configuration submenu."""
         if user_input is not None:
             # Process the device configuration input and go back to the menu
             self.data.update(user_input)
             return await self.async_step_menu()
 
+        user_input = self.data[CONF_INPUTS].get(self.temp_input_priority)
+        ADVANCED_CONFIG_SCHEMA = vol.Schema(  # pylint: disable=invalid-name
+            {
+                vol.Optional(
+                    "deadtime", default=user_input.get("deadtime")
+                ): selector.DurationSelector(),
+                vol.Optional(
+                    "detect_manual", default=user_input.get("deadtime", True)
+                ): selector.BooleanSelector(),
+                vol.Optional(
+                    "automation_pause", default=user_input.get("automation_pause")
+                ): selector.DurationSelector(),
+                vol.Optional(
+                    "initial_run", default=user_input.get("initial_run", True)
+                ): selector.BooleanSelector(),
+            },
+            extra=vol.ALLOW_EXTRA,
+        )
         # Show the device configuration form
         return self.async_show_form(
             step_id="advanced",
@@ -850,4 +825,4 @@ class InvalidAuth(HomeAssistantError):
 
 
 class InvalidData(HomeAssistantError):
-    """Error to indicate there is invalid data"""
+    """Error to indicate there is invalid data."""
