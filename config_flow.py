@@ -5,6 +5,7 @@ import logging
 from typing import Any, Dict, Optional
 
 import voluptuous as vol
+from voluptuous_serialize import UNSUPPORTED, convert
 
 from homeassistant import config_entries
 from homeassistant.components.binary_sensor import DOMAIN as BINARY_SENSOR_DOMAIN
@@ -21,23 +22,14 @@ from homeassistant.components import websocket_api, template
 from homeassistant.const import CONF_NAME, CONF_STATE
 from .const import CONF_INPUTS, DOMAIN
 from homeassistant.exceptions import TemplateError
+from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.translation import async_get_translations
 
 _LOGGER = logging.getLogger(__name__)
 
 
-# def not_in_excluded_values(excluded_values):
-#     """Return a validator that checks if value is not in the excluded list."""
-
-#     def validate(value):
-#         """Validate that the value is not in the excluded list."""
-#         if value in excluded_values:
-#             raise vol.Invalid(f"The value {value} is not allowed.")
-#         return value
-
-#     return validate
-
-
 def insert_and_shift_up(d, new_key, new_value):
+    """Insert a key and value into an existing position and shifts other keys by 1."""
     # Assuming that the keys are integer and sorted
     # Get the largest key in the dictionary
     max_key = max(d.keys(), default=new_key - 1)
@@ -66,7 +58,7 @@ class PlaceholderHub:
 
 
 def string_to_boolean(s: str):
-    """Convert Boolean to String to actual boolean or return None if not boolean"""
+    """Convert Boolean to String to actual boolean or return None if not boolean."""
     if s.lower() == "true":
         return True
     elif s.lower() == "false":
@@ -75,56 +67,84 @@ def string_to_boolean(s: str):
         return None
 
 
-async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, Any]:
-    if data is None:
-        return None
-    if (
-        string_to_boolean(data["control_type"]) is not None
-    ):  # remove Control Entity if boolean
-        data.pop("control_entity", None)
-    sun_attributes = [
-        "azimut",
-        "elevation",
-        "buildingDeviation",
-        "offset_entry",
-        "offset_exit",
-        "updateInterval",
-        "sun_entity",
-        "setIfInShadow",
-        "shadow",
-        "elevation_lt10",
-        "elevation_10to20",
-        "elevation_20to30",
-        "elevation_30to40",
-        "elevation_40to50",
-        "elevation_50to60",
-        "elevation_gt60",
-    ]
-    entity_attributes = ["value_entity"]
-    template_attributes = ["value_template"]
-    value_attributes = ["value"]
-    if data["value_type"] == "fixed":  # clean not needed keys and validate input
-        if data.get("value") is None:
-            raise InvalidData
-        for key in sun_attributes + entity_attributes + template_attributes:
-            data.pop(key, None)
-    elif data["value_type"] == "entity":
-        if data.get("value_entity") is None:
-            raise InvalidData
-        for key in sun_attributes + value_attributes + template_attributes:
-            data.pop(key, None)
-    elif data["value_type"] == "template":
-        if data.get("value_template") is None:
-            raise InvalidData
-        for key in sun_attributes + entity_attributes + value_attributes:
-            data.pop(key, None)
-    elif data.get("value_type") == "sun":
-        for key in sun_attributes:
-            if data[key] is None:
-                raise InvalidData
-        for key in value_attributes + entity_attributes + template_attributes:
-            data.pop(key, None)
-    return data
+SUN_ATTRIBUTES = [
+    "azimut",
+    "elevation",
+    "buildingDeviation",
+    "offset_entry",
+    "offset_exit",
+    "updateInterval",
+    "sun_entity",
+    "setIfInShadow",
+    "shadow",
+    "elevation_lt10",
+    "elevation_10to20",
+    "elevation_20to30",
+    "elevation_30to40",
+    "elevation_40to50",
+    "elevation_50to60",
+    "elevation_gt60",
+]
+ENTITY_ATTRIBUTES = ["value_entity"]
+TEMPLATE_ATTRIBUTES = ["value_template"]
+VALUE_ATTRIBUTES = ["value"]
+
+
+def validate_input(
+    step: int, user_input: dict[str, Any], data: dict[str, Any]
+) -> dict[str, Any]:
+    """Validate Input data for Step 1 & 2."""
+    if user_input is None:
+        return {"user_input": None, "errors": {"base": "missing_data"}}
+    errors = {}
+    if step is None or step == 1:
+        if user_input.get("name", "") == "":
+            errors.update({"name": "input_name_req"})
+        if user_input.get("priority") is None:
+            errors.update({"priority": "priority_req"})
+        elif int(user_input.get("priority")) in data[CONF_INPUTS]:
+            errors.update({"priority": "priority_dup"})
+        if user_input.get("control_type") is None:
+            errors.update({"control_type": "control_type_req"})
+        if user_input.get("control_type") == "entity" and not cv.valid_entity_id(
+            user_input.get("control_entity")
+            if user_input.get("control_entity") is not None
+            else ""
+        ):
+            errors.update({"control_entity": "control_entity_req"})
+        if user_input.get("value_type") is None:
+            errors.update({"value_type": "value_type_req"})
+
+    else:
+        if (
+            string_to_boolean(user_input["control_type"]) is not None
+        ):  # remove Control Entity if boolean
+            user_input.pop("control_entity", None)
+
+        if (
+            user_input["value_type"] == "fixed"
+        ):  # clean not needed keys and validate input
+            if user_input.get("value") is None:
+                errors.update({"value": "fixed_value_req"})
+            for key in SUN_ATTRIBUTES + ENTITY_ATTRIBUTES + TEMPLATE_ATTRIBUTES:
+                user_input.pop(key, None)
+        elif user_input["value_type"] == "entity":
+            if user_input.get("value_entity") is None:
+                errors.update({"value_entity": "value_entity_req"})
+            for key in SUN_ATTRIBUTES + VALUE_ATTRIBUTES + TEMPLATE_ATTRIBUTES:
+                user_input.pop(key, None)
+        elif user_input["value_type"] == "template":
+            if user_input.get("value_template") is None:
+                errors.update({"value_template": "template_value_req"})
+            for key in SUN_ATTRIBUTES + ENTITY_ATTRIBUTES + VALUE_ATTRIBUTES:
+                user_input.pop(key, None)
+        elif user_input.get("value_type") == "sun":
+            for key in SUN_ATTRIBUTES:
+                if user_input[key] is None:
+                    errors.update({key: "required"})
+            for key in VALUE_ATTRIBUTES + ENTITY_ATTRIBUTES + TEMPLATE_ATTRIBUTES:
+                user_input.pop(key, None)
+    return {"user_input": user_input, "errors": errors}
 
 
 @config_entries.HANDLERS.register(DOMAIN)
@@ -152,61 +172,21 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> FlowResult:
         """Handle the initial step."""
         errors: dict[str, str] = {}
-        # self.data = user_input
         self.data[CONF_INPUTS] = {}
-        # Entry point of the config flow
-        # if user_input is not None:
-        # try:
-        #     await validate_auth(user_input[CONF_ACCESS_TOKEN], self.hass)
-        # except ValueError:
-        #     errors["base"] = "auth"
-        # if not errors:
-        # self.data = user_input
-        # self.data[CONF_INPUTS] = []
         return await self.async_step_menu()
-        return self.async_show_form(
-            step_id="menu",
-            data_schema=vol.Schema(
-                {
-                    vol.Required("mainmenu"): selector.SelectSelector(
-                        selector.SelectSelectorConfig(options=MAINMENU),
-                    )
-                },
-            ),
-            errors=errors,
-        )
-        if user_input is not None:
-            try:
-                info = await validate_input(self.hass, user_input)
-            except CannotConnect:
-                errors["base"] = "cannot_connect"
-            except InvalidAuth:
-                errors["base"] = "invalid_auth"
-            except Exception:  # pylint: disable=broad-except
-                _LOGGER.exception("Unexpected exception")
-                errors["base"] = "unknown"
-            else:
-                return self.async_create_entry(title=info["title"], data=user_input)
 
-        # Check if the user has enabled advanced options
-        if self.show_advanced_options:
-            return self.async_show_form(
-                step_id="user",
-                data_schema=vol.Schema(
-                    {**BASE_CONFIG_SCHEMA.schema, **ADVANCED_CONFIG_SCHEMA.schema}
-                ),
-                errors=errors,
-            )
-        else:
-            return self.async_show_form(
-                step_id="user",
-                data_schema=BASE_CONFIG_SCHEMA,
-                errors=errors,
-            )
-
-        # return self.async_show_form(
-        #     step_id="user", data_schema=CONFIG_SCHEMA, errors=errors
-        # )
+        # if user_input is not None:
+        #     try:
+        #         info = await validate_input(self.hass, user_input)
+        #     except CannotConnect:
+        #         errors["base"] = "cannot_connect"
+        #     except InvalidAuth:
+        #         errors["base"] = "invalid_auth"
+        #     except Exception:  # pylint: disable=broad-except
+        #         _LOGGER.exception("Unexpected exception")
+        #         errors["base"] = "unknown"
+        #     else:
+        #         return self.async_create_entry(title=info["title"], data=user_input)
 
     async def async_step_menu(self, user_input=None):
         # Handle the initial menu selection
@@ -227,37 +207,64 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self.temp_input_priority = user_input.get("mainmenu")[5:]
                 return await self.async_step_add()
         # If no input or not handled, show the menu again
+        #########
+        language = self.hass.config.language
+        translations = await async_get_translations(
+            self.hass,
+            language=language,
+            integrations=[DOMAIN],
+            category="selector",
+            config_flow=True,
+        )
+
+        # Use translated state names
+        # for state in all_states:
+        #     device_class = state.attributes.get("device_class", "_")
+        #     key = f"component.{state.domain}.entity_component.{device_class}.state.{state.state}"
+        #     state.state = translations.get(key, state.state)
+
+        #########
         MAINMENU = [
-            selector.SelectOptionDict(value="basic", label="Basic Setup"),
-            selector.SelectOptionDict(value="advanced", label="Advance Setup"),
+            # selector.SelectOptionDict(value="basic", label="Basic Setup"),
+            # selector.SelectOptionDict(value="advanced", label="Advance Setup"),
+            selector.SelectOptionDict(value="basic", label="basic"),
+            selector.SelectOptionDict(value="advanced", label="advanced"),
         ]
-        MAINMENU.append(selector.SelectOptionDict(value="add", label="Add Input"))
+        MAINMENU.append(selector.SelectOptionDict(value="add", label="add"))
         if len(self.data[CONF_INPUTS]) > 0:
             for prio in self.data[CONF_INPUTS]:
                 MAINMENU.append(
                     selector.SelectOptionDict(
                         value="input" + str(self.data[CONF_INPUTS][prio]["priority"]),
-                        label="Edit Input "
-                        + str(prio)
-                        + ": "
+                        label=translations.get(
+                            "component.priorityswitch.selector.mainmenu.options.input_"
+                            + str(self.data[CONF_INPUTS][prio]["priority"])
+                        )
                         + str(self.data[CONF_INPUTS][prio]["name"]),
                     )
                 )
-            MAINMENU.append(
-                selector.SelectOptionDict(value="del", label="Delete Input")
-            )
-            MAINMENU.append(selector.SelectOptionDict(value="save", label="Save"))
+            MAINMENU.append(selector.SelectOptionDict(value="del", label="del"))
+            if self.data.get("name") is not None:
+                MAINMENU.append(selector.SelectOptionDict(value="save", label="save"))
+        description_placeholders = {}
+        for prio in self.data[CONF_INPUTS]:
+            description_placeholders["input_name" + str(prio)] = self.data[CONF_INPUTS][
+                prio
+            ]["name"]
         return self.async_show_form(
             step_id="menu",
             data_schema=vol.Schema(
                 {
                     vol.Required("mainmenu"): selector.SelectSelector(
                         selector.SelectSelectorConfig(
-                            options=MAINMENU, mode=selector.SelectSelectorMode.LIST
+                            options=MAINMENU,
+                            mode=selector.SelectSelectorMode.LIST,
+                            translation_key="mainmenu",
                         ),
                     )
                 }
             ),
+            description_placeholders=description_placeholders,
             last_step=False
             if self.data.get("name") is None or len(self.data[CONF_INPUTS]) == 0
             else True,
@@ -278,13 +285,10 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             MENU.append(
                 selector.SelectOptionDict(
                     value="input" + str(self.data[CONF_INPUTS][prio]["priority"]),
-                    label="Delete Input "
-                    + str(prio)
-                    + ": "
-                    + str(self.data[CONF_INPUTS][prio]["name"]),
+                    label="input" + str(self.data[CONF_INPUTS][prio]["priority"]),
                 )
             )
-        MENU.append(selector.SelectOptionDict(value="back", label="Previous Menu"))
+        MENU.append(selector.SelectOptionDict(value="back", label="back"))
         # Show the device configuration form
         return self.async_show_form(
             step_id="del",
@@ -302,85 +306,113 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_add(self, user_input=None):
         # Handle the device configuration submenu
+        errors = {}
         if user_input is not None:
             # Process the device configuration input and go back to the menu
-            # self.data.update(user_input)
-            if (
-                self.temp_input_priority is not None
-                and int(self.temp_input_priority) == user_input["priority"]
-            ):  # Update existing
-                self.data[CONF_INPUTS][user_input["priority"]].update(user_input)
-            elif self.temp_input_priority is None:  # Add a new one
-                self.data[CONF_INPUTS][user_input["priority"]] = user_input
-            else:  # Reorder
-                insert_and_shift_up(
-                    self.data[CONF_INPUTS], user_input["priority"], user_input
-                )
-                # self.data[CONF_INPUTS] = newInputs
-            self.temp_input_priority = user_input["priority"]
-            if user_input["value_type"] == "fixed":
-                return await self.async_step_add_input_fixed(user_input)
-            elif user_input["value_type"] == "entity":
-                return await self.async_step_add_input_entity(user_input)
-            elif user_input["value_type"] == "template":
-                return await self.async_step_add_input_template(user_input)
-            elif user_input["value_type"] == "sun":
-                return await self.async_step_add_input_sun(user_input)
-            user_input = await validate_input(self.hass, user_input)
-            self.temp_input_priority = None
-            return await self.async_step_menu()
+            val = validate_input(1, user_input, self.data)
+            if len(val.get("errors", {})) == 0:
+                if user_input.get("control_type") in ["True", "False"] or (
+                    user_input.get("control_type") == "entity"
+                    and not user_input.get("control_entity") is None
+                ):  # validate if control_entity is required
+                    if (
+                        self.temp_input_priority is not None
+                        and int(self.temp_input_priority) == user_input["priority"]
+                    ):  # Update existing
+                        self.data[CONF_INPUTS][user_input["priority"]].update(
+                            user_input
+                        )
+                    elif self.temp_input_priority is None:  # Add a new one
+                        self.data[CONF_INPUTS][user_input["priority"]] = user_input
+                    else:  # Reorder
+                        insert_and_shift_up(
+                            self.data[CONF_INPUTS], user_input["priority"], user_input
+                        )
+                        # self.data[CONF_INPUTS] = newInputs
+                    self.temp_input_priority = user_input["priority"]
+                    if user_input["value_type"] == "fixed":
+                        return await self.async_step_add_input_fixed(user_input)
+                    elif user_input["value_type"] == "entity":
+                        return await self.async_step_add_input_entity(user_input)
+                    elif user_input["value_type"] == "template":
+                        return await self.async_step_add_input_template(user_input)
+                    elif user_input["value_type"] == "sun":
+                        return await self.async_step_add_input_sun(user_input)
+                    user_input = await validate_input(self.hass, user_input, self.data)
+                    self.temp_input_priority = None
+                    return await self.async_step_menu()
+            else:
+                errors = val.get("errors")
 
         i = (
             self.data[CONF_INPUTS][int(self.temp_input_priority)]
             if len(self.data[CONF_INPUTS]) > 0
+            else user_input
+            if user_input is not None
             else {}
         )
-        INPUT_SCHEMA = vol.Schema(
-            {
-                vol.Required("name", default=i.get("name")): str,
-                vol.Required(
-                    "priority",
-                    default=i.get(
-                        "priority", max(self.data[CONF_INPUTS], default=0) + 1
-                    ),
-                ): vol.All(
-                    selector.NumberSelector(
-                        selector.NumberSelectorConfig(
-                            min=1, max=20, mode=selector.NumberSelectorMode.BOX
-                        ),
-                    ),
-                    vol.Coerce(int),
-                    # vol.NotIn(list(self.data[CONF_INPUTS].keys())),
+        if user_input is None:
+            user_input = {}
+
+        CONTROL_ENTITY_SCHEMA = {
+            vol.Optional("control_entity", default=i.get("control_entity")): vol.Any(
+                None,
+                selector.EntitySelector(
+                    selector.EntitySelectorConfig(
+                        domain=[BINARY_SENSOR_DOMAIN, INPUT_BOOLEAN_DOMAIN]
+                    )
                 ),
-                vol.Required(
-                    "control_type", default=i.get("control_type")
-                ): selector.SelectSelector(
+            ),
+        }
+
+        INPUT_SCHEMA_START = {
+            vol.Optional("name", default=i.get("name")): vol.Any(
+                None,
+                selector.TextSelector(),
+            ),
+            vol.Optional(
+                "priority",
+                default=i.get("priority", max(self.data[CONF_INPUTS], default=0) + 1),
+            ): vol.All(
+                selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        min=1, max=20, mode=selector.NumberSelectorMode.BOX
+                    ),
+                ),
+                vol.Coerce(int),
+            ),
+            vol.Optional("control_type", default=i.get("control_type")): vol.Any(
+                None,
+                selector.SelectSelector(
                     selector.SelectSelectorConfig(
                         options=self.CONTROLTYPE,
                         mode=selector.SelectSelectorMode.LIST,
                     ),
                 ),
-                vol.Optional(
-                    "control_entity", default=i.get("control_entity")
-                ): vol.Any(
-                    None,
-                    selector.EntitySelector(
-                        selector.EntitySelectorConfig(
-                            domain=[BINARY_SENSOR_DOMAIN, INPUT_BOOLEAN_DOMAIN]
-                        )
-                    ),
-                ),
-                vol.Required(
-                    "value_type", default=i.get("value_type")
-                ): selector.SelectSelector(
+            ),
+        }
+
+        INPUT_SCHEMA_END = {
+            vol.Required("value_type", default=i.get("value_type")): vol.Any(
+                None,
+                selector.SelectSelector(
                     selector.SelectSelectorConfig(
                         options=self.VALUETYPE,
                         mode=selector.SelectSelectorMode.LIST,
-                    ),
+                        # msg="Type of Input is required!",
+                    )
                 ),
-            },
-            extra=vol.ALLOW_EXTRA,
-        )
+            ),
+        }
+        # Combine the dictionaries
+        combined_schema_dict = {
+            **INPUT_SCHEMA_START,
+            **CONTROL_ENTITY_SCHEMA,
+            **INPUT_SCHEMA_END,
+        }
+
+        # Create the Schema object with extra=ALLOW_EXTRA
+        INPUT_SCHEMA = vol.Schema(combined_schema_dict, extra=vol.ALLOW_EXTRA)
         # Show the device configuration form
         return self.async_show_form(
             step_id="add",
@@ -393,6 +425,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 if self.temp_input_priority is not None
                 else ""
             },
+            errors=errors,
         )
 
     async def async_step_add_input_entity(self, user_input=None):
@@ -488,7 +521,6 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self.temp_input_priority = None
             return await self.async_step_menu()
 
-        # if self.temp_input_priority is None:
         i = self.data[CONF_INPUTS][int(self.temp_input_priority)]
         # Define a schema for the "inputs" part of the configuration
         INPUT_SCHEMA = vol.Schema(
@@ -653,7 +685,6 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         # Handle the device configuration submenu
         if user_input.get("value", None) is not None:
             # Process the device configuration input and go back to the menu
-            # self.data.update(user_input)
 
             self.data[CONF_INPUTS][self.temp_input_priority].update(user_input)
             self.temp_input_priority = None
@@ -696,16 +727,18 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         BASE_CONFIG_SCHEMA = vol.Schema(
             {
-                vol.Required("switch_name", default=self.data.get("switch_name")): str,
-                vol.Required("output", default=self.data.get("output")): str,
                 vol.Required(
-                    "status_entity", default=self.data.get("status_entity")
-                ): selector.EntitySelector(),
-                vol.Required(
-                    "status_entity_icon", default=self.data.get("status_entity")
-                ): selector.IconSelector(),
+                    "switch_name", default=self.data.get("switch_name")
+                ): selector.TextSelector(),
+                # vol.Required("output", default=self.data.get("output")): selector.TextSelector(),
+                # vol.Required(
+                #     "status_entity", default=self.data.get("status_entity","status")
+                # ): selector.TextSelector(),
+                # vol.Required(
+                #     "status_entity_icon", default=self.data.get("status_entity_icon")
+                # ): selector.IconSelector(),
                 vol.Optional(
-                    "enabled", default=self.data.get("status_entity", True)
+                    "enabled", default=self.data.get("enabled", True)
                 ): selector.BooleanSelector(),
             },
             extra=vol.ALLOW_EXTRA,
@@ -720,25 +753,29 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         # Handle the device configuration submenu
         ADVANCED_CONFIG_SCHEMA = vol.Schema(
             {
-                vol.Required("switch_name", default=self.data.get("switch_name")): str,
-                vol.Required("output", default=self.data.get("output")): str,
+                vol.Required(
+                    "switch_name", default=self.data.get("switch_name")
+                ): selector.TextSelector(),
+                # vol.Required("output", default=self.data.get("output")): selector.TextSelector(),
                 vol.Required("output_sequence"): selector.TemplateSelector(),
-                vol.Required(
-                    "status_entity", default=self.data.get("status_entity")
-                ): selector.EntitySelector(),
-                vol.Required(
-                    "status_entity_icon", default=self.data.get("status_entity")
-                ): selector.IconSelector(),
+                # vol.Required(
+                #     "status_entity", default=self.data.get("status_entity")
+                # ): selector.EntitySelector(),
+                # vol.Required(
+                #     "status_entity_icon", default=self.data.get("status_entity")
+                # ): selector.IconSelector(),
                 vol.Optional(
                     "enabled", default=self.data.get("status_entity", True)
                 ): selector.BooleanSelector(),
                 vol.Optional(
                     "deadtime", default={"hours": 0, "minutes": 0, "seconds": 30}
                 ): selector.DurationSelector(),
-                vol.Optional("detect_manual", default=True): bool,
-                vol.Optional("automation_pause", default=120): int,
-                vol.Optional("initial_run", default=True): bool,
-                vol.Optional("debug", default=True): bool,
+                vol.Optional("detect_manual", default=True): selector.BooleanSelector(),
+                vol.Optional(
+                    "automation_pause", default={"hours": 2, "minutes": 0, "seconds": 0}
+                ): selector.DurationSelector(),
+                vol.Optional("initial_run", default=True): selector.BooleanSelector(),
+                vol.Optional("debug", default=True): selector.BooleanSelector(),
             },
             extra=vol.ALLOW_EXTRA,
         )
@@ -757,12 +794,6 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_setup_preview(hass: HomeAssistant) -> None:
         """Set up preview WS API."""
         websocket_api.async_register_command(hass, ws_start_preview)
-
-    # async def async_step_preview(self, user_input):
-    #     """Handle the preview step."""
-    #     # Normally you would handle the preview logic here
-    #     # For this example, we'll just show the form again
-    #     return self.async_show_form(step_id="preview", data_schema=CONFIG_SCHEMA)
 
 
 @websocket_api.websocket_command(
@@ -806,34 +837,6 @@ def ws_start_preview(
                 msg["id"], "template_error", f"Error rendering template: {ex}"
             )
         )
-
-    # @callback
-    # def async_preview_updated(
-    #     state: str | None,
-    #     attributes: Mapping[str, Any] | None,
-    #     listeners: dict[str, bool | set[str]] | None,
-    #     error: str | None,
-    # ) -> CALLBACK_TYPE:
-    #     """Forward config entry state events to websocket."""
-    #     if error is not None:
-    #         connection.send_message(
-    #             websocket_api.event_message(
-    #                 msg["id"],
-    #                 {"error": error},
-    #             )
-    #         )
-    #         return
-    #     rendered_template = tp.render_complex(template_str)
-    #     connection.send_message(
-    #         websocket_api.event_message(
-    #             msg["id"],
-    #             {
-    #                 "attributes": attributes,
-    #                 "listeners": listeners,
-    #                 "state": rendered_template,
-    #             },
-    #         )
-    #     )
 
     connection.send_result(msg["id"])
 

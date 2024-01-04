@@ -37,31 +37,11 @@
         "title": "Input {input_name} Step 1/2",
         "description": "Here you can define all properties for an input. Not all values are required and some are mutual exclusive!",
         "data": {
-          "name": "Input Name",
-          "priority": "Priority of Input (Higher = More Important)",
-          "control_type": "Control the Input, Can be True/False to set it permanently or point to a boolean entity to have it dynamic.",
+          "name": "Input Name*",
+          "priority": "Priority of Input (Higher = More Important)*",
+          "control_type": "Control the Input, Can be True/False to set it permanently or point to a boolean entity to have it dynamic.*",
           "control_entity": "The Entity to control this input. Only required if set Control Type to Entity above.",
-          "value_type": "The type of Input you want to use.",
-          "value": "The value the Input should send. Use this to send a fixed value. Only one can be used other should be empty (Value/Value Entity/Value Template)",
-          "value_entity": "The entity that should be used to get the value from to send. Only one can be used other should be empty (Value/Value Entity/Value Template)",
-          "value_template": "The value template that should be used to get the value from to send. Only one can be used other should be empty (Value/Value Entity/Value Template)",
-          "auto_shade": "Enable this to activate cover control by sun. You need to fill in all below configuration to use this!",
-          "azimut": "The Azimut when the cover will be in sun",
-          "elevation": "The Elevation when the cover will be in sun",
-          "buildingDeviation": "The deviation of the building (you can think of it like which side of the building)",
-          "offset_entry": "An offset for when we conside the need to have shadow (-90 to 0) and the sun is entering the window.",
-          "offset_exit": "An offset for when we conside the need to have shadow (0 to 90) and the sun is leaving the window.",
-          "updateInterval": "How often should we recalculate in minutes. Have this too small will make the cover move constantly!",
-          "sun_entity": "The entity we use to track the sun. Usually sun.sun",
-          "setIfInShadow": "Inverts the function, only triggers if we consider the window to be in the shadow",
-          "shadow": "Position to send when in Shadow (0)",
-          "elevation_lt10": "Position to send when elevation < 10 (0)",
-          "elevation_10to20": "Position to send when in elevation between 10 and 20 (0)",
-          "elevation_20to30": "Position to send when in elevation between 20 and 30 (0)",
-          "elevation_30to40": "Position to send when in elevation between 30 and 40 (0)",
-          "elevation_40to50": "Position to send when in elevation between 40 and 50 (0)",
-          "elevation_50to60": "Position to send when in elevation between 50 and 60 (0)",
-          "elevation_gt60": "Position to send when in elevation > 60 (0)"
+          "value_type": "The type of Input you want to use.*"
         }
       },
       "add_input_fixed": {
@@ -112,10 +92,88 @@
     "error": {
       "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
       "invalid_auth": "[%key:common::config_flow::error::invalid_auth%]",
-      "unknown": "[%key:common::config_flow::error::unknown%]"
+      "unknown": "[%key:common::config_flow::error::unknown%]",
+      "control_type_req": "A Control Type is required!",
+      "missing_data": "Missing Data!",
+      "fixed_value_req": "A value is required for a fixed Value Type!",
+      "value_entity_req": "An Entity is required for an Entity Value Type!",
+      "template_value_req": "A valid template is required for a Template Value Type!",
+      "required": "Required",
+      "control_entity_req": "A valid control entity is required!",
+      "value_type_req": "Please choose type of entity!",
+      "input_name_req": "You need a name for the Input!",
+      "priority_req": "You need to have a priority for the input!",
+      "priority_dup": "You already have this priority for another input! You can reorder them in the main setup later."
     },
     "abort": {
       "already_configured": "[%key:common::config_flow::abort::already_configured_device%]"
+    }
+  },
+  "selector": {
+    "menu": {
+      "options": {
+        "back": "Previous Menu"
+      }
+    },
+    "mainmenu": {
+      "options": {
+        "basic": "Basic Setup",
+        "advanced": "Advance Setup",
+        "add": "Add Input",
+        "input_1": "Edit Input 1: ",
+        "input_2": "Edit Input 2: ",
+        "input_3": "Edit Input 3: ",
+        "input_4": "Edit Input 4: ",
+        "input_5": "Edit Input 5: ",
+        "input_6": "Edit Input 6: ",
+        "input_7": "Edit Input 7: ",
+        "input_8": "Edit Input 8: ",
+        "input_9": "Edit Input 9: ",
+        "input_10": "Edit Input 10: ",
+        "input_11": "Edit Input 11: ",
+        "input_12": "Edit Input 12: ",
+        "input_13": "Edit Input 13: ",
+        "input_14": "Edit Input 14: ",
+        "input_15": "Edit Input 15: ",
+        "input_16": "Edit Input 16: ",
+        "input_17": "Edit Input 17: ",
+        "input_18": "Edit Input 18: ",
+        "input_19": "Edit Input 19: ",
+        "input_20": "Edit Input 20: ",
+        "del": "Delete Input",
+        "save": "Save",
+        "reorder": "Reorder Inputs"
+      }
+    },
+    "mainmenubak": {
+      "options": {
+        "basic": "Basic Setup",
+        "advanced": "Advance Setup",
+        "add": "Add Input",
+        "input1": "Edit Input 1: {input_name1}",
+        "input2": "Edit Input 2: {input_name2}",
+        "input3": "Edit Input 3: {input_name3}",
+        "input4": "Edit Input 4: {input_name4}",
+        "input5": "Edit Input 5: {input_name5}",
+        "input6": "Edit Input 6: {input_name6}",
+        "input7": "Edit Input 7: {input_name7}",
+        "input8": "Edit Input 8: {input_name8}",
+        "input9": "Edit Input 9: {input_name9}",
+        "input10": "Edit Input 10: {input_name10}",
+        "input11": "Edit Input 11: {input_name11}",
+        "input12": "Edit Input 12: {input_name12}",
+        "input13": "Edit Input 13: {input_name13}",
+        "input14": "Edit Input 14: {input_name14}",
+        "input15": "Edit Input 15: {input_name15}",
+        "input16": "Edit Input 16: {input_name16}",
+        "input17": "Edit Input 17: {input_name17}",
+        "input18": "Edit Input 18: {input_name18}",
+        "input19": "Edit Input 19: {input_name19}",
+        "input20": "Edit Input 20: {input_name20}",
+        "del": "Delete Input",
+        "save": "Save",
+        "reorder": "Reorder Inputs"
+      }
     }
   }
 }
