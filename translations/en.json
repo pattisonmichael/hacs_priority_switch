@@ -6,6 +6,7 @@
         "error": {
             "cannot_connect": "Failed to connect",
             "control_entity_req": "A valid control entity is required!",
+            "control_template_req": "A valid control template is required!",
             "control_type_req": "A Control Type is required!",
             "fixed_value_req": "A value is required for a fixed Value Type!",
             "input_name_req": "You need a name for the Input!",
@@ -24,7 +25,8 @@
                 "data": {
                     "auto_off": "Amount of seconds after a control entity is switched off again after it was switched on.",
                     "auto_on": "Amount of seconds after a control entity is switched on again after it was switched off.",
-                    "control_entity": "The Entity to control this input. Only required if set Control Type to Entity above.",
+                    "control_entity": "The Entity to control this input. Only required if set Control Type to Entity above.*",
+                    "control_template": "The template for the input control to evaluate.*",
                     "control_type": "Control the Input, Can be True/False to set it permanently or point to a boolean entity to have it dynamic.*",
                     "name": "Input Name*",
                     "priority": "Priority of Input (Higher = More Important)*",
@@ -96,7 +98,7 @@
             "menu": {
                 "data": {
                     "enabled": "Enabled",
-                    "switch_name": "Switch Name"
+                    "switch_name_friendly": "Switch Name"
                 },
                 "description": "Here you can setup a switch and all the required inputs for it.",
                 "title": "Add switch"
@@ -124,6 +126,22 @@
         }
     },
     "selector": {
+        "add_input_control": {
+            "options": {
+                "Entity": "Control Entity",
+                "False": "False",
+                "Template": "Control Template (must evaluate to on/True/off/False",
+                "True": "True"
+            }
+        },
+        "add_input_value": {
+            "options": {
+                "Entity": "Value Entity",
+                "Fixed": "Fixed Value",
+                "Sun": "Follow Sun",
+                "Template": "Value Template"
+            }
+        },
         "mainmenu": {
             "options": {
                 "add": "Add Input",

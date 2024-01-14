@@ -16,7 +16,7 @@ from homeassistant.exceptions import HomeAssistantError, TemplateError
 from homeassistant.helpers import config_validation as cv, selector, template as tp
 from homeassistant.helpers.translation import async_get_translations
 
-from .const import CONF_INPUTS, DOMAIN
+from .const import CONF_INPUTS, DOMAIN, ControlType, InputType
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -105,6 +105,11 @@ def validate_input(
             else ""
         ):
             errors.update({"control_entity": "control_entity_req"})
+        if user_input.get("control_type") == "template" and (
+            user_input.get("control_template") is None
+            or not cv.template(user_input.get("control_template"))
+        ):
+            errors.update({"control_template": "control_template_req"})
         if user_input.get("value_type") is None:
             errors.update({"value_type": "value_type_req"})
 
@@ -115,23 +120,23 @@ def validate_input(
             user_input.pop("control_entity", None)
 
         if (
-            user_input["value_type"] == "fixed"
+            user_input["value_type"] == InputType.FIXED
         ):  # clean not needed keys and validate input
             if user_input.get("value") is None:
                 errors.update({"value": "fixed_value_req"})
             for key in SUN_ATTRIBUTES + ENTITY_ATTRIBUTES + TEMPLATE_ATTRIBUTES:
                 user_input.pop(key, None)
-        elif user_input["value_type"] == "entity":
+        elif user_input["value_type"] == InputType.ENTITY:
             if user_input.get("value_entity") is None:
                 errors.update({"value_entity": "value_entity_req"})
             for key in SUN_ATTRIBUTES + VALUE_ATTRIBUTES + TEMPLATE_ATTRIBUTES:
                 user_input.pop(key, None)
-        elif user_input["value_type"] == "template":
+        elif user_input["value_type"] == InputType.TEMPLATE:
             if user_input.get("value_template") is None:
                 errors.update({"value_template": "template_value_req"})
             for key in SUN_ATTRIBUTES + ENTITY_ATTRIBUTES + VALUE_ATTRIBUTES:
                 user_input.pop(key, None)
-        elif user_input.get("value_type") == "sun":
+        elif user_input.get("value_type") == InputType.SUN:
             for key in SUN_ATTRIBUTES:
                 if user_input[key] is None:
                     errors.update({key: "required"})
@@ -149,15 +154,16 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     temp_input_priority = None  # to remember original priority of input while editing
     translations = None
     VALUETYPE = [
-        selector.SelectOptionDict(value="fixed", label="Fixed Value"),
-        selector.SelectOptionDict(value="entity", label="Value Entity"),
-        selector.SelectOptionDict(value="template", label="Value Template"),
-        selector.SelectOptionDict(value="sun", label="Follow Sun"),
+        selector.SelectOptionDict(value=str(InputType.FIXED), label="fixed"),
+        selector.SelectOptionDict(value=str(InputType.ENTITY), label="entity"),
+        selector.SelectOptionDict(value=str(InputType.TEMPLATE), label="template"),
+        selector.SelectOptionDict(value=str(InputType.SUN), label="sun"),
     ]
     CONTROLTYPE = [
-        selector.SelectOptionDict(value="True", label="True"),
-        selector.SelectOptionDict(value="False", label="False"),
-        selector.SelectOptionDict(value="entity", label="Control Entity"),
+        selector.SelectOptionDict(value=str(ControlType.TRUE), label="True"),
+        selector.SelectOptionDict(value=str(ControlType.FALSE), label="False"),
+        selector.SelectOptionDict(value=str(ControlType.ENTITY), label="entity"),
+        selector.SelectOptionDict(value=str(ControlType.TEMPLATE), label="template"),
     ]
 
     async def async_step_user(
@@ -179,18 +185,6 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
 
         return await self.async_step_menu()
-        # if user_input is not None:
-        #     try:
-        #         info = await validate_input(self.hass, user_input)
-        #     except CannotConnect:
-        #         errors["base"] = "cannot_connect"
-        #     except InvalidAuth:
-        #         errors["base"] = "invalid_auth"
-        #     except Exception:  # pylint: disable=broad-except
-        #         _LOGGER.exception("Unexpected exception")
-        #         errors["base"] = "unknown"
-        #     else:
-        #         return self.async_create_entry(title=info["title"], data=user_input)
 
     async def async_step_menu(self, user_input=None):
         """Handle the initial menu selection."""
@@ -199,7 +193,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             # if user_input.get("mainmenu") == "basic":
             #     return await self.async_step_basic()
             self.data["switch_name_friendly"] = user_input.get("switch_name_friendly")
-            self.data["enabled"] = user_input.get("enabled")
+            # self.data["enabled"] = user_input.get("enabled")
             if user_input.get("mainmenu") == "advanced":
                 return await self.async_step_advanced()
             elif user_input.get("mainmenu") == "add":
@@ -225,14 +219,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         #########
         MAINMENU = [  # pylint: disable=invalid-name
-            # selector.SelectOptionDict(value="basic", label="Basic Setup"),
-            # selector.SelectOptionDict(value="advanced", label="Advance Setup"),
-            # selector.SelectOptionDict(value="basic", label="basic"),
             selector.SelectOptionDict(value="advanced", label="advanced"),
         ]
-        ############
 
-        ############
         MAINMENU.append(selector.SelectOptionDict(value="add", label="add"))
         if len(self.data[CONF_INPUTS]) > 0:
             for prio in self.data[CONF_INPUTS]:
@@ -262,9 +251,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         "switch_name_friendly",
                         default=self.data.get("switch_name_friendly"),
                     ): selector.TextSelector(),
-                    vol.Optional(
-                        "enabled", default=self.data.get("enabled", True)
-                    ): selector.BooleanSelector(),
+                    # vol.Optional(
+                    #     "enabled", default=self.data.get("enabled", True)
+                    # ): selector.BooleanSelector(),
                     vol.Required("mainmenu", default="add"): selector.SelectSelector(
                         selector.SelectSelectorConfig(
                             options=MAINMENU,
@@ -307,7 +296,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 {
                     vol.Required("menu"): selector.SelectSelector(
                         selector.SelectSelectorConfig(
-                            options=MENU, mode=selector.SelectSelectorMode.LIST
+                            options=MENU,
+                            mode=selector.SelectSelectorMode.LIST,
+                            translation_key="menu",
                         ),
                     )
                 }
@@ -321,9 +312,17 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             # Process the device configuration input and go back to the menu
             val = validate_input(1, user_input, self.data)
             if len(val.get("errors", {})) == 0:
-                if user_input.get("control_type") in ["True", "False"] or (
-                    user_input.get("control_type") == "entity"
-                    and user_input.get("control_entity") is not None
+                if (
+                    user_input.get("control_type")
+                    in [ControlType.TRUE, ControlType.FALSE]
+                    or (
+                        user_input.get("control_type") == ControlType.ENTITY
+                        and user_input.get("control_entity") is not None
+                    )
+                    or (
+                        user_input.get("control_type") == ControlType.TEMPLATE
+                        and user_input.get("control_template") is not None
+                    )
                 ):  # validate if control_entity is required
                     if (
                         self.temp_input_priority is not None
@@ -340,13 +339,13 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         )
                         # self.data[CONF_INPUTS] = newInputs
                     self.temp_input_priority = user_input["priority"]
-                    if user_input["value_type"] == "fixed":
+                    if user_input["value_type"] == InputType.FIXED:
                         return await self.async_step_add_input_fixed(user_input)
-                    elif user_input["value_type"] == "entity":
+                    elif user_input["value_type"] == InputType.ENTITY:
                         return await self.async_step_add_input_entity(user_input)
-                    elif user_input["value_type"] == "template":
+                    elif user_input["value_type"] == InputType.TEMPLATE:
                         return await self.async_step_add_input_template(user_input)
-                    elif user_input["value_type"] == "sun":
+                    elif user_input["value_type"] == InputType.SUN:
                         return await self.async_step_add_input_sun(user_input)
                     user_input = await validate_input(self.hass, user_input, self.data)
                     self.temp_input_priority = None
@@ -356,7 +355,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         i = (
             self.data[CONF_INPUTS][int(self.temp_input_priority)]
-            if len(self.data[CONF_INPUTS]) > 0
+            if len(self.data[CONF_INPUTS]) > 0 and self.temp_input_priority is not None
             else user_input
             if user_input is not None
             else {}
@@ -364,16 +363,25 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is None:
             user_input = {}
 
-        CONTROL_ENTITY_SCHEMA = {  # pylint: disable=invalid-name
-            vol.Optional("control_entity", default=i.get("control_entity")): vol.Any(
-                None,
-                selector.EntitySelector(
-                    selector.EntitySelectorConfig(
-                        domain=[BINARY_SENSOR_DOMAIN, INPUT_BOOLEAN_DOMAIN]
-                    )
-                ),
-            ),
-        }
+        CONTROL_ENTITY_SCHEMA = {}  # pylint: disable=invalid-name
+        if (x := user_input.get("control_type")) == ControlType.ENTITY:
+            CONTROL_ENTITY_SCHEMA.update(
+                {
+                    vol.Required(
+                        "control_entity", default=i.get("control_entity")
+                    ): selector.EntitySelector(
+                        selector.EntitySelectorConfig(
+                            domain=[BINARY_SENSOR_DOMAIN, INPUT_BOOLEAN_DOMAIN]
+                        )
+                    ),
+                }
+            )
+        elif x == ControlType.TEMPLATE:
+            CONTROL_ENTITY_SCHEMA.update(
+                {
+                    vol.Required("control_template"): selector.TemplateSelector(),
+                }
+            )
 
         INPUT_SCHEMA_START = {  # pylint: disable=invalid-name
             vol.Optional("name", default=i.get("name")): vol.Any(
@@ -397,6 +405,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     selector.SelectSelectorConfig(
                         options=self.CONTROLTYPE,
                         mode=selector.SelectSelectorMode.LIST,
+                        translation_key="add_input_control",
                     ),
                 ),
             ),
@@ -409,6 +418,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     selector.SelectSelectorConfig(
                         options=self.VALUETYPE,
                         mode=selector.SelectSelectorMode.LIST,
+                        translation_key="add_input_value",
                         # msg="Type of Input is required!",
                     )
                 ),
