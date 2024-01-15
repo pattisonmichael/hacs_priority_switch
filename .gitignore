@@ -1,0 +1,6 @@
+__pycache__
+core.code-workspace
+sample.yaml
+__pycache__/config_flow.cpython-311.pyc
+__pycache__/const.cpython-311.pyc
+__pycache__/sensor.cpython-311.pyc

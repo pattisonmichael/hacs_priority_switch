@@ -183,8 +183,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 category="selector",
                 config_flow=True,
             )
-
-        return await self.async_step_menu()
+        res = await self.async_step_menu()
+        return res
 
     async def async_step_menu(self, user_input=None):
         """Handle the initial menu selection."""

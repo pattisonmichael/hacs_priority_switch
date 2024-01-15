@@ -7,6 +7,7 @@ from typing import Any
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.components.switch import SwitchEntity
+from homeassistant.components.template.template_entity import _TemplateAttribute
 from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 
 # from homeassistant.core import HomeAssistant
@@ -23,7 +24,7 @@ from homeassistant.helpers import (
     device_registry as dr,
     entity_registry as er,
 )
-
+from homeassistant.helpers.entity import Entity, EntityDescription
 from homeassistant.helpers.event import (
     EventStateChangedData,
     TrackTemplate,
@@ -33,14 +34,27 @@ from homeassistant.helpers.event import (
     async_track_state_change_event,
     async_track_template_result,
 )
+from homeassistant.helpers.template import Template, result_as_boolean
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType, EventType
 
-from .const import DOMAIN, DOMAIN_FRIENDLY, ControlType, InputType, ATTR_CONTROL_STATE
+from .const import (
+    ATTR_CONTROL_ENTITY,
+    ATTR_CONTROL_ENTITY_VALUE,
+    ATTR_CONTROL_STATE,
+    ATTR_CONTROL_TEMPLATE,
+    ATTR_CONTROL_TEMPLATE_VALUE,
+    ATTR_CONTROL_TYPE,
+    ATTR_VALUE,
+    DOMAIN,
+    DOMAIN_FRIENDLY,
+    ControlType,
+    InputType,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class InputClass:
+class InputClass(Entity):
     """Main Input Class."""
 
     def __init__(
@@ -73,6 +87,9 @@ class InputClass:
         self.control_value = control_value
         self.control_entity = control_entity
         self.control_template = control_template
+        self._template_attrs: dict[Template, list[_TemplateAttribute]] = {}
+        self._template_result_info: TrackTemplateResultInfo | None = None
+        self._self_ref_update_count = 0
         self.control_sensor_source_id = None
         self.control_unregister_callback = None
         self.value_type = InputType(value_type)
@@ -86,6 +103,61 @@ class InputClass:
 
         self.register_callbacks()
 
+    #################
+
+    ######
+
+    @callback
+    def _handle_results(
+        self,
+        event: EventType[EventStateChangedData] | None,
+        updates: list[TrackTemplateResult],
+    ) -> None:
+        """Call back the results to the attributes."""
+        if event:
+            self.async_set_context(event.context)
+
+        entity_id = event and event.data["entity_id"]
+
+        if entity_id and entity_id == self.entity_id:
+            self._self_ref_update_count += 1
+        else:
+            self._self_ref_update_count = 0
+
+        if self._self_ref_update_count > len(self._template_attrs):
+            for update in updates:
+                _LOGGER.warning(
+                    (
+                        "Template loop detected while processing event: %s, skipping"
+                        " template render for Template[%s]"
+                    ),
+                    event,
+                    update.template.template,
+                )
+            return
+
+        if updates is not None:
+            # self._control_state = updates[0].result
+            # # self.parent._control_state = cv.boolean(new_state.state)
+            # self.parent.update_control(cv.boolean(self._control_state))
+            self.control_state = cv.boolean(updates[0].result)
+            self.priority_switch.recalculate_value()
+
+        # try:
+        #     calculated_state = self._async_calculate_state()
+        #     validate_state(calculated_state.state)
+        # except Exception as err:  # pylint: disable=broad-exception-caught
+        #     # self._preview_callback(None, None, None, str(err))
+        #     _LOGGER.error(str(err))
+        # else:
+        #     assert self._template_result_info
+        #     _LOGGER.debug(
+        #         "Template result:\nstate: %s\nattributes: %s",
+        #         calculated_state.state,
+        #         calculated_state.attributes,
+        #     )
+
+    ######
     def register_callbacks(self):
         """Register callback functions for entity and template updates.
 
@@ -93,7 +165,7 @@ class InputClass:
         """
 
         @callback
-        def process_entity_change(event: EventType[EventStateChangedData]) -> None:
+        def process_entity_state(event: EventType[EventStateChangedData]) -> None:
             """Handle the sensor state changes."""
             if (
                 (old_state := event.data["old_state"]) is None
@@ -116,7 +188,7 @@ class InputClass:
             )
             # self.async_on_remove(
             self.control_unregister_callback = async_track_state_change_event(
-                self.hass, self.control_sensor_source_id, process_entity_change
+                self.hass, self.control_sensor_source_id, process_entity_state
             )
             try:
                 self.control_state = self.hass.states.get(
@@ -126,7 +198,23 @@ class InputClass:
                 pass
             # )
         elif ctype == ControlType.TEMPLATE:
-            pass
+            if self.control_template is not None:
+                template_var_tups: list[TrackTemplate] = []
+                template_var_tup = TrackTemplate(Template(self.control_template), None)
+                template_var_tups.insert(0, template_var_tup)
+
+                result_info = async_track_template_result(
+                    self.hass,
+                    template_var_tups,
+                    self._handle_results,
+                    # log_fn=log_fn,
+                    has_super_template=False,
+                )
+                self.control_unregister_callback = result_info.async_remove
+                self._template_result_info = result_info
+                result_info.async_refresh()
+                return
+
         ###
 
     ###
@@ -172,7 +260,20 @@ class PrioritySwitch(SensorEntity):
         # self._attr_is_on = config["enabled"]
         self._inputs = {}  # Using a dictionary to store inputs
         self.hass = hass
+        self._attr_unique_id = f"{config['switch_name']}-test"
         self._value = None
+        self._attr_device_info = dr.DeviceInfo(
+            identifiers={
+                (DOMAIN, config["switch_name"]),
+            },
+            name=config["switch_name"],
+            manufacturer=DOMAIN_FRIENDLY,
+            # model="Nordic",
+            # serial_number=coordinator.device.serial_number,
+        )
+        # model=entry.data.get('switch_name_friendly'),
+        # sw_version="config.swversion",
+        # hw_version="config.hwversion",
         # self._sensor = sensor  # Reference to the PrioritySensor instance
         # self._attr_device_info = device.dict_repr
 
@@ -195,8 +296,8 @@ class PrioritySwitch(SensorEntity):
     def add_input(self, input_data):
         """Add a new input to the switch."""
         if len(self._inputs) < 20:
-            input_data.update({"hass": self.hass})
-            input_obj = InputClass(self, **input_data)
+            # input_data.update({"hass": self.hass})
+            input_obj = InputClass(self, hass=self.hass, **input_data)
             self._inputs[input_obj.priority] = input_obj
             self.recalculate_value()
         else:
@@ -231,7 +332,8 @@ class PrioritySwitch(SensorEntity):
             else None
         )
 
-    def recalculate_value(self):  # noqa: D102
+    def recalculate_value(self):
+        """Recalculate current state and value of the sensor."""
         # Implement the logic to recalculate the state of the switch
         # After recalculating, update the state of the switch
         # if not self._state:
@@ -298,9 +400,24 @@ class PrioritySwitch(SensorEntity):
         }
         inputs = {}
         for item in self._inputs.values():
-            inputs.update(
-                {cv.slugify(item.name): {ATTR_CONTROL_STATE: item.control_state}}
-            )
+            x = item.name
+            inputs[x] = {
+                ATTR_CONTROL_STATE: item.control_state,
+                ATTR_CONTROL_TYPE: str(item.control_type),
+            }
+            if item.control_type == ControlType.ENTITY:
+                inputs[x][ATTR_CONTROL_ENTITY] = item.control_entity
+                inputs[x][ATTR_CONTROL_ENTITY_VALUE] = item.control_state
+            elif item.control_type == ControlType.TEMPLATE:
+                inputs[x][ATTR_CONTROL_TEMPLATE] = item.control_template
+                inputs[x][ATTR_CONTROL_TEMPLATE_VALUE] = item.control_state
+            # inputs.update(
+            #     {cv.slugify(item.name): {
+            #         ATTR_CONTROL_STATE: item.control_state,
+            #         ATTR_CONTROL_TYPE:str(item.control_type),
+            #         }
+            #      }
+            # )
         states.update({"inputs": inputs})
         return states
 
