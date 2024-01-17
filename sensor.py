@@ -6,7 +6,8 @@ import logging
 from typing import Any
 
 from homeassistant.components.sensor import SensorEntity
-from homeassistant.components.switch import SwitchEntity
+
+# from homeassistant.components.switch import SwitchEntity
 from homeassistant.components.template.template_entity import _TemplateAttribute
 from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 
@@ -47,9 +48,8 @@ from .const import (
     ATTR_VALUE,
     DOMAIN,
     DOMAIN_FRIENDLY,
-    ControlType,
-    InputType,
 )
+from .data_types import ControlType, InputType
 
 _LOGGER = logging.getLogger(__name__)
 

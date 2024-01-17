@@ -42,6 +42,22 @@ async def async_update_options(self, hass, entry):
 async def update_listener(hass, entry):
     """Handle options update."""
     _LOGGER.debug("Update listener called: %s", entry)
+    await hass.config_entries.async_reload(entry.entry_id)
+
+
+# async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+#     """Unload a config entry."""
+#     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+
+#     if unload_ok:
+#         hass.data[DOMAIN].pop(entry.entry_id)
+
+#     return unload_ok
+
+
+# async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
+#     """Update listener."""
+#     await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_update_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
