@@ -17,6 +17,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Priority Switch from a config entry."""
 
     hass.data.setdefault(DOMAIN, {})
+    entry.async_on_unload(entry.add_update_listener(update_listener))
     # TODO 1. Create API instance
     # TODO 2. Validate the API connection (and authentication)
     # TODO 3. Store an API object for your platforms to access
@@ -25,10 +26,27 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     # Use `hass.async_create_task` to avoid a circular dependency between the platform and the component
     # print(hass.data[DOMAIN][entry.entry_id])
+
     hass.async_create_task(
         hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     )
+
     return True
+
+
+async def async_update_options(self, hass, entry):
+    """Handle options update."""
+    _LOGGER.debug("Update listener called: %s", entry)
+
+
+async def update_listener(hass, entry):
+    """Handle options update."""
+    _LOGGER.debug("Update listener called: %s", entry)
+
+
+async def async_update_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Update a given config entry."""
+    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

@@ -1,26 +1,17 @@
 """Config flow for Priority Switch integration."""
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
-from collections.abc import AsyncGenerator
-import copy
 import logging
 from typing import Any, Optional
 
 import voluptuous as vol
 
 from homeassistant import config_entries
-from homeassistant.config_entries import (
-    ConfigEntry,
-    ConfigFlow,
-    OptionsFlow,
-    OptionsFlowWithConfigEntry,
-)
 from homeassistant.components import websocket_api
 from homeassistant.components.binary_sensor import DOMAIN as BINARY_SENSOR_DOMAIN
 from homeassistant.components.input_boolean import DOMAIN as INPUT_BOOLEAN_DOMAIN
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.data_entry_flow import FlowResult, FlowHandler
+from homeassistant.data_entry_flow import FlowResult
 from homeassistant.exceptions import HomeAssistantError, TemplateError
 from homeassistant.helpers import config_validation as cv, selector, template as tp
 from homeassistant.helpers.translation import async_get_translations
@@ -154,8 +145,9 @@ def validate_input(
     return {"user_input": user_input, "errors": errors}
 
 
-class PrioritySwitchCommonFlow(ABC, FlowHandler):
-    """Base class for flows"""
+@config_entries.HANDLERS.register(DOMAIN)
+class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+    """Handle a config flow for Priority Switch."""
 
     VERSION = 1
     data: Optional[dict[str, Any]] = {}
@@ -174,14 +166,25 @@ class PrioritySwitchCommonFlow(ABC, FlowHandler):
         selector.SelectOptionDict(value=str(ControlType.TEMPLATE), label="template"),
     ]
 
-    def __init__(
-        self,
-    ) -> None:
-        """Initialize KNXCommonFlow."""
+    async def async_step_user(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle the initial step."""
+        # errors: dict[str, str] = {}
+        self.data[CONF_INPUTS] = {}
 
-    @abstractmethod
-    def finish_flow(self) -> FlowResult:
-        """Finish the flow."""
+        # get translastions
+        if self.translations is None:
+            language = self.hass.config.language
+            self.translations = await async_get_translations(
+                self.hass,
+                language=language,
+                integrations=[DOMAIN],
+                category="selector",
+                config_flow=True,
+            )
+        res = await self.async_step_menu()
+        return res
 
     async def async_step_menu(self, user_input=None):
         """Handle the initial menu selection."""
@@ -199,10 +202,9 @@ class PrioritySwitchCommonFlow(ABC, FlowHandler):
                 return await self.async_step_del()
             elif user_input.get("mainmenu") == "save":
                 self.data["switch_name"] = cv.slugify(self.data["switch_name_friendly"])
-                # return self.async_create_entry(
-                #     title=self.data["switch_name_friendly"], data=self.data
-                # )
-                return self.finish_flow()
+                return self.async_create_entry(
+                    title=self.data["switch_name_friendly"], data=self.data
+                )
             elif user_input.get("mainmenu")[:5] == "input":
                 self.temp_input_priority = user_input.get("mainmenu")[5:]
                 return await self.async_step_add()
@@ -388,9 +390,7 @@ class PrioritySwitchCommonFlow(ABC, FlowHandler):
             ),
             vol.Optional(
                 "priority",
-                default=i.get(
-                    "priority", int(max(self.data[CONF_INPUTS], default=0)) + 1
-                ),
+                default=i.get("priority", max(self.data[CONF_INPUTS], default=0) + 1),
             ): vol.All(
                 selector.NumberSelector(
                     selector.NumberSelectorConfig(
@@ -779,95 +779,6 @@ class PrioritySwitchCommonFlow(ABC, FlowHandler):
     async def async_setup_preview(hass: HomeAssistant) -> None:
         """Set up preview WS API."""
         websocket_api.async_register_command(hass, ws_start_preview)
-
-
-@config_entries.HANDLERS.register(DOMAIN)
-class PrioritySwitchConfigFlow(
-    PrioritySwitchCommonFlow, config_entries.ConfigFlow, domain=DOMAIN
-):
-    """Handle a config flow for Priority Switch."""
-
-    VERSION = 1
-
-    @staticmethod
-    @callback
-    def async_get_options_flow(config_entry: ConfigEntry) -> PrioritySwitchOptionsFlow:
-        """Get the options flow for this handler."""
-        return PrioritySwitchOptionsFlow(config_entry)
-
-    @callback
-    def finish_flow(self) -> FlowResult:
-        """Create the ConfigEntry."""
-        return self.async_create_entry(
-            title=self.data["switch_name_friendly"], data=self.data
-        )
-
-    async def async_step_user(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Handle the initial step."""
-        # errors: dict[str, str] = {}
-        self.data[CONF_INPUTS] = {}
-
-        # get translastions
-        if self.translations is None:
-            language = self.hass.config.language
-            self.translations = await async_get_translations(
-                self.hass,
-                language=language,
-                integrations=[DOMAIN],
-                category="selector",
-                config_flow=True,
-            )
-        res = await self.async_step_menu()
-        return res
-
-
-class PrioritySwitchOptionsFlow(PrioritySwitchCommonFlow, OptionsFlowWithConfigEntry):
-    """OptionsFlow handler."""
-
-    def __init__(self, config_entry: ConfigEntry) -> None:
-        """Initialize KNX options flow."""
-        self._config_entry = config_entry
-        self.data = copy.deepcopy(dict(config_entry.data))
-        self.initial_data = copy.deepcopy(dict(config_entry.data))
-        _LOGGER.debug("OptionsFlow Data: %s", self.data)
-        # super().__init__(initial_data=config_entry.data)  # type: ignore[arg-type]
-
-    @callback
-    def finish_flow(self) -> FlowResult:
-        """Update the ConfigEntry and finish the flow."""
-        # new_data = DEFAULT_ENTRY_DATA | self.initial_data | self.new_entry_data
-        new_data = dict(self.data)
-        self.data = self.initial_data
-        res = self.hass.config_entries.async_update_entry(
-            self.config_entry,
-            data=new_data,
-            title=new_data["switch_name_friendly"],
-        )
-        # self.async_abort(reason="updated")
-        _LOGGER.debug("Config_entry updated: %s", res)
-        return self.async_create_entry(title="", data={})
-
-    async def async_step_init(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Manage KNX options."""
-
-        if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
-        # get translastions
-        if self.translations is None:
-            language = self.hass.config.language
-            self.translations = await async_get_translations(
-                self.hass,
-                language=language,
-                integrations=[DOMAIN],
-                category="selector",
-                config_flow=True,
-            )
-        res = await self.async_step_menu()
-        return res
 
 
 @websocket_api.websocket_command(
