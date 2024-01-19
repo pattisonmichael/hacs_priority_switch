@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Optional
+from typing import Optional, Dict
 
 
 class ControlType(StrEnum):
@@ -60,7 +60,9 @@ class InputData:
 class PrioritySwitchData:
     """Dataclass for PrioritySwitch Data definition."""
 
-    inputs: dict[str, InputData] = field(default_factory=dict)
+    inputs: Dict[str, InputData] = field(
+        default_factory=lambda: dict()
+    )  # dict[str, InputData] = field(default_factory=dict)
     switch_name_friendly: Optional[str] = None
     switch_name: Optional[str] = None
     deadtime: Optional[str] = None

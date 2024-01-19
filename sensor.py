@@ -74,7 +74,22 @@ class InputClass(Entity):
         auto_on=None,
         auto_off=None,
         hass: HomeAssistant = None,
-        # callback=None,
+        azimut=None,
+        elevation=None,
+        building_deviation=None,
+        offset_entry=None,
+        offset_exit=None,
+        update_interval=None,
+        sun_entity=None,
+        set_if_in_shadow=None,
+        shadow=None,
+        elevation_lt10=None,
+        elevation_10to20=None,
+        elevation_20to30=None,
+        elevation_30to40=None,
+        elevation_40to50=None,
+        elevation_50to60=None,
+        elevation_gt60=None,
     ):
         """Init Class for Input."""
         self.priority_switch = (
@@ -100,6 +115,22 @@ class InputClass(Entity):
         self.auto_off = auto_off
         self.hass = hass
         # self.parent_callback = callback
+        self.azimut = azimut
+        self.elevation = elevation
+        self.building_deviation = building_deviation
+        self.offset_entry = offset_entry
+        self.offset_exit = offset_exit
+        self.update_interval = update_interval
+        self.sun_entity = sun_entity
+        self.set_if_in_shadow = set_if_in_shadow
+        self.shadow = shadow
+        self.elevation_lt10 = elevation_lt10
+        self.elevation_10to20 = elevation_10to20
+        self.elevation_20to30 = elevation_20to30
+        self.elevation_30to40 = elevation_30to40
+        self.elevation_40to50 = elevation_40to50
+        self.elevation_50to60 = elevation_50to60
+        self.elevation_gt60 = elevation_gt60
 
         self.register_callbacks()
 

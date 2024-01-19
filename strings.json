@@ -26,7 +26,7 @@
         }
       },
       "advanced": {
-        "title": "Basic Setup",
+        "title": "Advanced Setup",
         "description": "You need to fill in all field. For advanced options you can choose Advanced Setup from the main menu.",
         "data": {
           "switch_name": "Switch Name",
@@ -148,7 +148,7 @@
         }
       },
       "advanced": {
-        "title": "Basic Setup",
+        "title": "Advanced Setup",
         "description": "You need to fill in all field. For advanced options you can choose Advanced Setup from the main menu.",
         "data": {
           "switch_name": "Switch Name",

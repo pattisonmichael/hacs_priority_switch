@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 
 # from collections.abc import AsyncGenerator
 import copy
+from dataclasses import fields
 import logging
 from types import MappingProxyType
 from typing import Any, Optional
@@ -33,6 +34,16 @@ from .data_types import (
     InputType,
     PrioritySwitchData,
 )
+from .schema import (
+    ADVANCED_CONFIG_SCHEMA,
+    ENTITY_ATTRIBUTES,
+    INPUT_SCHEMA_END,
+    INPUT_SCHEMA_START,
+    INPUT_SCHEMA_SUN,
+    SUN_ATTRIBUTES,
+    TEMPLATE_ATTRIBUTES,
+    VALUE_ATTRIBUTES,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -41,14 +52,14 @@ def insert_and_shift_up(d, new_key, new_value):
     """Insert a key and value into an existing position and shifts other keys by 1."""
     # Assuming that the keys are integer and sorted
     # Get the largest key in the dictionary
-    max_key = max(d.keys(), default=new_key - 1)
+    max_key = max(d.keys(), default=int(new_key) - 1)
 
     # Start from max_key and go down to new_key, shifting values up by one
-    for key in range(max_key, new_key - 1, -1):
-        d[key + 1] = d[key]
+    for key in range(int(max_key), int(new_key) - 1, -1):
+        d[str(key + 1)] = d[str(key)]
 
     # Insert the new key and value
-    d[new_key] = new_value
+    d[str(new_key)] = new_value
 
 
 # class PlaceholderHub:
@@ -76,31 +87,8 @@ def string_to_boolean(s: str):
         return None
 
 
-SUN_ATTRIBUTES = [
-    "azimut",
-    "elevation",
-    "buildingDeviation",
-    "offset_entry",
-    "offset_exit",
-    "updateInterval",
-    "sun_entity",
-    "setIfInShadow",
-    "shadow",
-    "elevation_lt10",
-    "elevation_10to20",
-    "elevation_20to30",
-    "elevation_30to40",
-    "elevation_40to50",
-    "elevation_50to60",
-    "elevation_gt60",
-]
-ENTITY_ATTRIBUTES = ["value_entity"]
-TEMPLATE_ATTRIBUTES = ["value_template"]
-VALUE_ATTRIBUTES = ["value"]
-
-
 def validate_input(
-    step: int, user_input: dict[str, Any], data: dict[str, Any]
+    step: int, user_input: dict[str, Any], data: dict[str, Any], priority: int = None
 ) -> dict[str, Any]:
     """Validate Input data for Step 1 & 2."""
     if user_input is None:
@@ -111,8 +99,8 @@ def validate_input(
             errors.update({"name": "input_name_req"})
         if user_input.get("priority") is None:
             errors.update({"priority": "priority_req"})
-        elif int(user_input.get("priority")) in data.inputs:
-            errors.update({"priority": "priority_dup"})
+        # elif int(user_input.get("priority")) != int(priority):
+        #     errors.update({"priority": "priority_dup"})
         if user_input.get("control_type") is None:
             errors.update({"control_type": "control_type_req"})
         if user_input.get("control_type") == "entity" and not cv.valid_entity_id(
@@ -168,26 +156,14 @@ class PrioritySwitchCommonFlow(ABC, FlowHandler):
     data: Optional[dict[str, Any]] = {}
     temp_input_priority = None  # to remember original priority of input while editing
     translations = None
-    VALUETYPE = [
-        selector.SelectOptionDict(value=str(InputType.FIXED), label="fixed"),
-        selector.SelectOptionDict(value=str(InputType.ENTITY), label="entity"),
-        selector.SelectOptionDict(value=str(InputType.TEMPLATE), label="template"),
-        selector.SelectOptionDict(value=str(InputType.SUN), label="sun"),
-    ]
-    CONTROLTYPE = [
-        selector.SelectOptionDict(value=str(ControlType.TRUE), label="True"),
-        selector.SelectOptionDict(value=str(ControlType.FALSE), label="False"),
-        selector.SelectOptionDict(value=str(ControlType.ENTITY), label="entity"),
-        selector.SelectOptionDict(value=str(ControlType.TEMPLATE), label="template"),
-    ]
 
     def __init__(self, initial_data=PrioritySwitchData()) -> None:
         """Initialize CommonFlow."""
         self._initial_data = initial_data
         if isinstance(initial_data, MappingProxyType):
-            self.cur_data = PrioritySwitchData(**initial_data)
+            self.cur_data = copy.deepcopy(PrioritySwitchData(**initial_data))
         else:
-            self.cur_data = copy.deepcopy(initial_data)
+            self.cur_data = PrioritySwitchData()  # copy.deepcopy(initial_data)
         _LOGGER.debug("initial_data: %s", self.cur_data)
 
     @abstractmethod
@@ -219,26 +195,26 @@ class PrioritySwitchCommonFlow(ABC, FlowHandler):
         ]
 
         MAINMENU.append(selector.SelectOptionDict(value="add", label="add"))
-        if len(self.cur_data.inputs) > 0:
-            for prio in self.cur_data.inputs:
-                MAINMENU.append(
-                    selector.SelectOptionDict(
-                        value="input" + str(self.cur_data.inputs[prio]["priority"]),
-                        label=self.translations.get(
-                            "component.priorityswitch.selector.mainmenu.options.input_"
-                            + str(self.cur_data.inputs[prio]["priority"])
-                        )
-                        + str(self.cur_data.inputs[prio]["name"]),
+        # if len(self.cur_data.inputs) > 0:
+        for val in self.cur_data.inputs.values():
+            # for prio in self.cur_data.inputs:
+            MAINMENU.append(
+                selector.SelectOptionDict(
+                    value="input" + str(val["priority"]),
+                    label=self.translations.get(
+                        "component.priorityswitch.selector.mainmenu.options.input_"
+                        + str(val["priority"])
                     )
+                    + str(val["name"]),
                 )
-            MAINMENU.append(selector.SelectOptionDict(value="del", label="del"))
-            if self.cur_data.switch_name_friendly is not None:
-                MAINMENU.append(selector.SelectOptionDict(value="save", label="save"))
+            )
+        MAINMENU.append(selector.SelectOptionDict(value="del", label="del"))
+        if self.cur_data.switch_name_friendly is not None:
+            MAINMENU.append(selector.SelectOptionDict(value="save", label="save"))
+            ##
         description_placeholders = {}
-        for prio in self.cur_data.inputs:
-            description_placeholders["input_name" + str(prio)] = self.cur_data.inputs[
-                prio
-            ]["name"]
+        for prio, val in self.cur_data.inputs.items():
+            description_placeholders["input_name" + str(prio)] = val["name"]
         return self.async_show_form(
             step_id="menu",
             data_schema=vol.Schema(
@@ -272,11 +248,11 @@ class PrioritySwitchCommonFlow(ABC, FlowHandler):
             return await self.async_step_menu()
 
         MENU = []  # pylint: disable=invalid-name
-        for prio in self.cur_data.inputs:
+        for val in self.cur_data.inputs.values():
             MENU.append(
                 selector.SelectOptionDict(
-                    value="input" + str(self.cur_data.inputs[prio]["priority"]),
-                    label=f"input{self.cur_data.inputs[prio]['priority']} {self.cur_data.inputs[prio]['name']}",  # pylint: disable=line-too-long
+                    value="input" + str(val["priority"]),
+                    label=f"input{val['priority']} {val['name']}",  # pylint: disable=line-too-long
                 )
             )
         MENU.append(selector.SelectOptionDict(value="back", label="back"))
@@ -302,7 +278,7 @@ class PrioritySwitchCommonFlow(ABC, FlowHandler):
         errors = {}
         if user_input is not None:
             # Process the device configuration input and go back to the menu
-            val = validate_input(1, user_input, self.cur_data)
+            val = validate_input(1, user_input, self.cur_data, self.temp_input_priority)
             if len(val.get("errors", {})) == 0:
                 if (
                     user_input.get("control_type")
@@ -320,9 +296,20 @@ class PrioritySwitchCommonFlow(ABC, FlowHandler):
                         self.temp_input_priority is not None
                         and int(self.temp_input_priority) == user_input["priority"]
                     ):  # Update existing
-                        self.cur_data.inputs[user_input["priority"]].update(user_input)
+                        self.cur_data.inputs[str(user_input["priority"])].update(
+                            user_input
+                        )
                     elif self.temp_input_priority is None:  # Add a new one
-                        self.cur_data.inputs[user_input["priority"]] = user_input
+                        if str(user_input["priority"]) in self.cur_data.inputs:
+                            insert_and_shift_up(
+                                self.cur_data.inputs,
+                                user_input["priority"],
+                                user_input,
+                            )
+                        else:
+                            self.cur_data.inputs[
+                                str(user_input["priority"])
+                            ] = user_input
                     else:  # Reorder
                         insert_and_shift_up(
                             self.cur_data.inputs,
@@ -348,11 +335,14 @@ class PrioritySwitchCommonFlow(ABC, FlowHandler):
 
         # i = (
         user_input = (
-            self.cur_data.inputs[int(self.temp_input_priority)]
+            self.cur_data.inputs[self.temp_input_priority]
             if len(self.cur_data.inputs) > 0 and self.temp_input_priority is not None
             else user_input
             if user_input is not None
-            else {"priority": int(max(self.cur_data.inputs, default=0)) + 1}
+            else {
+                "priority": int(max(self.cur_data.inputs, default=0)) + 1,
+                "new": True,
+            }
         )
         # if user_input is None:
         #     user_input = {'priority': int(max(self.cur_data.inputs, default=0)) + 1}
@@ -378,65 +368,6 @@ class PrioritySwitchCommonFlow(ABC, FlowHandler):
                 }
             )
 
-        INPUT_SCHEMA_START = {  # pylint: disable=invalid-name
-            vol.Optional(
-                "name",
-                # default=i.get("name")
-            ): vol.Any(
-                None,
-                selector.TextSelector(),
-            ),
-            vol.Optional(
-                "priority",
-                # default=i.get(
-                #     "priority", int(max(self.cur_data.inputs, default=0)) + 1
-                # ),
-            ): vol.All(
-                selector.NumberSelector(
-                    selector.NumberSelectorConfig(
-                        min=1, max=20, mode=selector.NumberSelectorMode.BOX
-                    ),
-                ),
-                vol.Coerce(int),
-            ),
-            vol.Optional(
-                "control_type",
-                # default=i.get("control_type")
-            ): vol.Any(
-                None,
-                selector.SelectSelector(
-                    selector.SelectSelectorConfig(
-                        options=self.CONTROLTYPE,
-                        mode=selector.SelectSelectorMode.LIST,
-                        translation_key="add_input_control",
-                    ),
-                ),
-            ),
-        }
-
-        INPUT_SCHEMA_END = {  # pylint: disable=invalid-name
-            vol.Required(
-                "value_type",
-                # default=i.get("value_type")
-            ): vol.Any(
-                None,
-                selector.SelectSelector(
-                    selector.SelectSelectorConfig(
-                        options=self.VALUETYPE,
-                        mode=selector.SelectSelectorMode.LIST,
-                        translation_key="add_input_value",
-                    )
-                ),
-            ),
-            vol.Optional(
-                "auto_on",
-                # default=user_input.get("auto_on")
-            ): vol.Any(None, selector.DurationSelector()),
-            vol.Optional(
-                "auto_off",
-                # default=user_input.get("auto_off")
-            ): vol.Any(None, selector.DurationSelector()),
-        }
         # Combine the dictionaries
         combined_schema_dict = {
             **INPUT_SCHEMA_START,
@@ -454,7 +385,7 @@ class PrioritySwitchCommonFlow(ABC, FlowHandler):
             # data_schema=INPUT_SCHEMA,
             data_schema=data_schema,
             description_placeholders={
-                "input_name": self.cur_data.inputs[int(self.temp_input_priority)][
+                "input_name": self.cur_data.inputs[str(self.temp_input_priority)][
                     "name"
                 ]
                 if self.temp_input_priority is not None
@@ -467,12 +398,12 @@ class PrioritySwitchCommonFlow(ABC, FlowHandler):
         """Handle the input entity configuration submenu."""
         if user_input.get("value_entity", None) is not None:
             # Process the device configuration input and go back to the menu
-            self.cur_data.inputs[self.temp_input_priority].update(user_input)
+            self.cur_data.inputs[str(self.temp_input_priority)].update(user_input)
             self.temp_input_priority = None
             return await self.async_step_menu()
 
         if self.temp_input_priority is not None:
-            user_input = self.cur_data.inputs[int(self.temp_input_priority)]
+            user_input = self.cur_data.inputs[str(self.temp_input_priority)]
             # if self.temp_input_priority is None:
             # Define a schema for the "inputs" part of the configuration
             INPUT_SCHEMA = vol.Schema(  # pylint: disable=invalid-name
@@ -497,7 +428,7 @@ class PrioritySwitchCommonFlow(ABC, FlowHandler):
             last_step=False,
             data_schema=self.add_suggested_values_to_schema(INPUT_SCHEMA, user_input),
             description_placeholders={
-                "input_name": self.cur_data.inputs[int(self.temp_input_priority)][
+                "input_name": self.cur_data.inputs[str(self.temp_input_priority)][
                     "name"
                 ]
             },
@@ -507,11 +438,11 @@ class PrioritySwitchCommonFlow(ABC, FlowHandler):
         """Handle the input template configuration submenu."""
         if user_input.get("value_template", None) is not None:
             # Process the device configuration input and go back to the menu
-            self.cur_data.inputs[self.temp_input_priority].update(user_input)
+            self.cur_data.inputs[str(self.temp_input_priority)].update(user_input)
             self.temp_input_priority = None
             return await self.async_step_menu()
         if self.temp_input_priority is not None:
-            user_input = self.cur_data.inputs[int(self.temp_input_priority)]
+            user_input = self.cur_data.inputs[str(self.temp_input_priority)]
             # if self.temp_input_priority is None:
             # Define a schema for the "inputs" part of the configuration
             INPUT_SCHEMA = vol.Schema(  # pylint: disable=invalid-name
@@ -536,7 +467,7 @@ class PrioritySwitchCommonFlow(ABC, FlowHandler):
             last_step=False,
             data_schema=self.add_suggested_values_to_schema(INPUT_SCHEMA, user_input),
             description_placeholders={
-                "input_name": self.cur_data.inputs[int(self.temp_input_priority)][
+                "input_name": self.cur_data.inputs[str(self.temp_input_priority)][
                     "name"
                 ]
             },
@@ -547,183 +478,37 @@ class PrioritySwitchCommonFlow(ABC, FlowHandler):
         """Handle the input sun configuration submenu."""
         if user_input.get("azimut", None) is not None:
             # Process the device configuration input and go back to the menu
-            self.cur_data.inputs[self.temp_input_priority].update(user_input)
+            self.cur_data.inputs[str(self.temp_input_priority)].update(user_input)
             self.temp_input_priority = None
             return await self.async_step_menu()
+        ###
+        # if user_input is not None:
+        #     # Process the device configuration input and go back to the menu
+        #     # self.cur_data.update(user_input)
+        #     for key, value in user_input.items():
+        #         setattr(self.cur_data, key, value)
+        #     self.temp_input_priority = None
+        #     return await self.async_step_menu()
 
-        i = self.cur_data.inputs[int(self.temp_input_priority)]
+        # user_input = self.cur_data.inputs.get(self.temp_input_priority)
+
+        ###
+        i = self.cur_data.inputs[str(self.temp_input_priority)]
         i.update(user_input)
         # i.update_interval=i.get("update_interval", 10)
         user_input = i
         # Define a schema for the "inputs" part of the configuration
-        INPUT_SCHEMA = vol.Schema(  # pylint: disable=invalid-name
-            {
-                #                    vol.Required("auto_shade"): bool,
-                vol.Required(
-                    "azimut",
-                    # default=i.get("azimut")
-                ): vol.All(
-                    selector.NumberSelector(
-                        selector.NumberSelectorConfig(
-                            min=0, max=360, mode=selector.NumberSelectorMode.BOX
-                        ),
-                    ),
-                    vol.Coerce(int),
-                ),
-                vol.Required(
-                    "elevation",
-                    # default=i.get("elevation")
-                ): vol.All(
-                    selector.NumberSelector(
-                        selector.NumberSelectorConfig(
-                            min=-90, max=90, mode=selector.NumberSelectorMode.SLIDER
-                        ),
-                    ),
-                    vol.Coerce(int),
-                ),
-                vol.Required(
-                    "building_deviation",  # default=i.get("buildingDeviation", 0)
-                ): vol.All(
-                    selector.NumberSelector(
-                        selector.NumberSelectorConfig(
-                            min=-90, max=90, mode=selector.NumberSelectorMode.SLIDER
-                        ),
-                    ),
-                    vol.Coerce(int),
-                ),
-                vol.Required(
-                    "offset_entry",
-                    # default=i.get("offset_entry", 0)
-                ): vol.All(
-                    selector.NumberSelector(
-                        selector.NumberSelectorConfig(
-                            min=-90, max=0, mode=selector.NumberSelectorMode.SLIDER
-                        ),
-                    ),
-                    vol.Coerce(int),
-                ),
-                vol.Required(
-                    "offset_exit",
-                    # default=i.get("offset_exit", 0)
-                ): vol.All(
-                    selector.NumberSelector(
-                        selector.NumberSelectorConfig(
-                            min=0, max=90, mode=selector.NumberSelectorMode.SLIDER
-                        ),
-                    ),
-                    vol.Coerce(int),
-                ),
-                vol.Required(
-                    "update_interval",  # default=i.get("updateInterval", 10)
-                ): vol.All(
-                    selector.NumberSelector(
-                        selector.NumberSelectorConfig(
-                            min=1, max=90, mode=selector.NumberSelectorMode.SLIDER
-                        ),
-                    ),
-                    vol.Coerce(int),
-                ),
-                vol.Required(
-                    "sun_entity",  # default=i.get("sun_entity", "sun.sun")
-                ): selector.EntitySelector(),
-                vol.Required(
-                    "set_if_in_shadow",  # default=i.get("setIfInShadow", False)
-                ): selector.BooleanSelector(),
-                vol.Optional(
-                    "shadow",
-                    # default=i.get("shadow")
-                ): vol.Any(
-                    None,
-                    vol.All(
-                        selector.NumberSelector(
-                            selector.NumberSelectorConfig(
-                                min=0, max=100, mode=selector.NumberSelectorMode.SLIDER
-                            ),
-                        ),
-                        vol.Coerce(int),
-                    ),
-                ),
-                vol.Required(
-                    "elevation_lt10",  # default=i.get("elevation_lt10", 0)
-                ): vol.All(
-                    selector.NumberSelector(
-                        selector.NumberSelectorConfig(
-                            min=0, max=100, mode=selector.NumberSelectorMode.SLIDER
-                        ),
-                    ),
-                    vol.Coerce(int),
-                ),
-                vol.Required(
-                    "elevation_10to20",  # default=i.get("elevation_10to20", 0)
-                ): vol.All(
-                    selector.NumberSelector(
-                        selector.NumberSelectorConfig(
-                            min=0, max=100, mode=selector.NumberSelectorMode.SLIDER
-                        ),
-                    ),
-                    vol.Coerce(int),
-                ),
-                vol.Required(
-                    "elevation_20to30",  # default=i.get("elevation_20to30", 50)
-                ): vol.All(
-                    selector.NumberSelector(
-                        selector.NumberSelectorConfig(
-                            min=0, max=100, mode=selector.NumberSelectorMode.SLIDER
-                        ),
-                    ),
-                    vol.Coerce(int),
-                ),
-                vol.Required(
-                    "elevation_30to40",  # default=i.get("elevation_30to40", 50)
-                ): vol.All(
-                    selector.NumberSelector(
-                        selector.NumberSelectorConfig(
-                            min=0, max=100, mode=selector.NumberSelectorMode.SLIDER
-                        ),
-                    ),
-                    vol.Coerce(int),
-                ),
-                vol.Required(
-                    "elevation_40to50",  # default=i.get("elevation_40to50", 50)
-                ): vol.All(
-                    selector.NumberSelector(
-                        selector.NumberSelectorConfig(
-                            min=0, max=100, mode=selector.NumberSelectorMode.SLIDER
-                        ),
-                    ),
-                    vol.Coerce(int),
-                ),
-                vol.Required(
-                    "elevation_50to60",  # default=i.get("elevation_50to60", 80)
-                ): vol.All(
-                    selector.NumberSelector(
-                        selector.NumberSelectorConfig(
-                            min=0, max=100, mode=selector.NumberSelectorMode.SLIDER
-                        ),
-                    ),
-                    vol.Coerce(int),
-                ),
-                vol.Required(
-                    "elevation_gt60",  # default=i.get("elevation_gt60", 100)
-                ): vol.All(
-                    selector.NumberSelector(
-                        selector.NumberSelectorConfig(
-                            min=0, max=100, mode=selector.NumberSelectorMode.SLIDER
-                        ),
-                    ),
-                    vol.Coerce(int),
-                ),
-            },
-            extra=vol.ALLOW_EXTRA,
-        )
-
+        # if user_input.get("sun_entity") is None:
+        #     user_input["sun_entity"] = "sun.sun"
         # Show the device configuration form
         return self.async_show_form(
             step_id="add_input_sun",
             last_step=False,
-            data_schema=self.add_suggested_values_to_schema(INPUT_SCHEMA, user_input),
+            data_schema=self.add_suggested_values_to_schema(
+                INPUT_SCHEMA_SUN, user_input
+            ),
             description_placeholders={
-                "input_name": self.cur_data.inputs[int(self.temp_input_priority)][
+                "input_name": self.cur_data.inputs[str(self.temp_input_priority)][
                     "name"
                 ]
             },
@@ -734,11 +519,11 @@ class PrioritySwitchCommonFlow(ABC, FlowHandler):
         if user_input.get("value", None) is not None:
             # Process the device configuration input and go back to the menu
 
-            self.cur_data.inputs[self.temp_input_priority].update(user_input)
+            self.cur_data.inputs[str(self.temp_input_priority)].update(user_input)
             self.temp_input_priority = None
             return await self.async_step_menu()
         if self.temp_input_priority is not None:
-            user_input = self.cur_data.inputs[int(self.temp_input_priority)]
+            user_input = self.cur_data.inputs[str(self.temp_input_priority)]
             # if self.temp_input_priority is None:
             # Define a schema for the "inputs" part of the configuration
             INPUT_SCHEMA = vol.Schema(  # pylint: disable=invalid-name
@@ -761,7 +546,7 @@ class PrioritySwitchCommonFlow(ABC, FlowHandler):
             last_step=False,
             data_schema=self.add_suggested_values_to_schema(INPUT_SCHEMA, user_input),
             description_placeholders={
-                "input_name": self.cur_data.inputs[int(self.temp_input_priority)][
+                "input_name": self.cur_data.inputs[str(self.temp_input_priority)][
                     "name"
                 ]
             },
@@ -771,27 +556,17 @@ class PrioritySwitchCommonFlow(ABC, FlowHandler):
         """Handle the advanced configuration submenu."""
         if user_input is not None:
             # Process the device configuration input and go back to the menu
-            self.cur_data.update(user_input)
+            # self.cur_data.update(user_input)
+            for key, value in user_input.items():
+                setattr(self.cur_data, key, value)
             return await self.async_step_menu()
 
-        user_input = self.cur_data.inputs.get(self.temp_input_priority)
-        ADVANCED_CONFIG_SCHEMA = vol.Schema(  # pylint: disable=invalid-name
-            {
-                vol.Optional(
-                    "deadtime",  # default=user_input.get("deadtime")
-                ): selector.DurationSelector(),
-                vol.Optional(
-                    "detect_manual",  # default=user_input.get("deadtime", True)
-                ): selector.BooleanSelector(),
-                vol.Optional(
-                    "automation_pause",  # default=user_input.get("automation_pause")
-                ): selector.DurationSelector(),
-                vol.Optional(
-                    "initial_run",  # default=user_input.get("initial_run", True)
-                ): selector.BooleanSelector(),
-            },
-            extra=vol.ALLOW_EXTRA,
-        )
+        # user_input = self.cur_data.inputs.get(self.temp_input_priority)
+        user_input = {
+            field.name: getattr(self.cur_data, field.name)
+            for field in fields(self.cur_data)
+            if field.name != "inputs"
+        }
         # Show the device configuration form
         return self.async_show_form(
             step_id="advanced",
@@ -822,7 +597,7 @@ class PrioritySwitchConfigFlow(PrioritySwitchCommonFlow, ConfigFlow, domain=DOMA
     def finish_flow(self) -> FlowResult:
         """Create the ConfigEntry."""
         return self.async_create_entry(
-            title=self.cur_data["switch_name_friendly"], data=self.cur_data
+            title=self.cur_data.switch_name_friendly, data=self.cur_data.__dict__
         )
 
     async def async_step_user(
@@ -863,10 +638,15 @@ class PrioritySwitchOptionsFlow(PrioritySwitchCommonFlow, OptionsFlowWithConfigE
         # new_data = DEFAULT_ENTRY_DATA | self.initial_data | self.new_entry_data
         # new_data = dict(self.cur_data)
         # self.cur_data = self.initial_data
+        data_dict = {
+            field.name: getattr(self.cur_data, field.name)
+            for field in fields(self.cur_data)
+        }
         res = self.hass.config_entries.async_update_entry(
             self.config_entry,
-            data=self.cur_data,
-            title=self.cur_data["switch_name_friendly"],
+            # data=self.cur_data,
+            data=MappingProxyType(data_dict),
+            title=self.cur_data.switch_name_friendly,
         )
         # self.async_abort(reason="updated")
         _LOGGER.debug("Config_entry updated: %s", res)
