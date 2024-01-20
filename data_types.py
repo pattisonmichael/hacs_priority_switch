@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Optional, Dict
+from typing import Dict, Optional  # noqa: UP035
 
 
 class ControlType(StrEnum):

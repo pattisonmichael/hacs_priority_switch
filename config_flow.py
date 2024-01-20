@@ -77,6 +77,9 @@ def insert_and_shift_up(d, new_key, new_value):
 #         return True
 
 
+# TODO: Add OutputTarget
+
+
 def string_to_boolean(s: str):
     """Convert Boolean to String to actual boolean or return None if not boolean."""
     if s.lower() == "true":
@@ -392,6 +395,9 @@ class PrioritySwitchCommonFlow(ABC, FlowHandler):
                 else ""
             },
             errors=errors,
+            preview="template"
+            if user_input.get("control_type") == ControlType.TEMPLATE
+            else None,
         )
 
     async def async_step_add_input_entity(self, user_input=None):
@@ -412,17 +418,7 @@ class PrioritySwitchCommonFlow(ABC, FlowHandler):
                 },
                 extra=vol.ALLOW_EXTRA,
             )
-        # else:  # Get previous Input data as new default
-        #     i = self.cur_data.inputs[int(self.temp_input_priority)]
-        #     INPUT_SCHEMA = vol.Schema(  # pylint: disable=invalid-name
-        #         {
-        #             vol.Required(
-        #                 "value_entity", default=i.get("value_entity", "")
-        #             ): selector.EntitySelector(),
-        #         },
-        #         extra=vol.ALLOW_EXTRA,
-        #     )
-        # Show the device configuration form
+
         return self.async_show_form(
             step_id="add_input_entity",
             last_step=False,
@@ -451,17 +447,7 @@ class PrioritySwitchCommonFlow(ABC, FlowHandler):
                 },
                 extra=vol.ALLOW_EXTRA,
             )
-        # else:  # Get previous Input data as new default
-        #     i = self.cur_data.inputs[int(self.temp_input_priority)]
-        #     INPUT_SCHEMA = vol.Schema(  # pylint: disable=invalid-name
-        #         {
-        #             vol.Required(
-        #                 "value_template", default=i.get("value_template")
-        #             ): selector.TemplateSelector(),
-        #         },
-        #         extra=vol.ALLOW_EXTRA,
-        #     )
-        # Show the device configuration form
+
         return self.async_show_form(
             step_id="add_input_template",
             last_step=False,
@@ -481,25 +467,12 @@ class PrioritySwitchCommonFlow(ABC, FlowHandler):
             self.cur_data.inputs[str(self.temp_input_priority)].update(user_input)
             self.temp_input_priority = None
             return await self.async_step_menu()
-        ###
-        # if user_input is not None:
-        #     # Process the device configuration input and go back to the menu
-        #     # self.cur_data.update(user_input)
-        #     for key, value in user_input.items():
-        #         setattr(self.cur_data, key, value)
-        #     self.temp_input_priority = None
-        #     return await self.async_step_menu()
 
-        # user_input = self.cur_data.inputs.get(self.temp_input_priority)
-
-        ###
         i = self.cur_data.inputs[str(self.temp_input_priority)]
         i.update(user_input)
         # i.update_interval=i.get("update_interval", 10)
         user_input = i
         # Define a schema for the "inputs" part of the configuration
-        # if user_input.get("sun_entity") is None:
-        #     user_input["sun_entity"] = "sun.sun"
         # Show the device configuration form
         return self.async_show_form(
             step_id="add_input_sun",
@@ -532,15 +505,7 @@ class PrioritySwitchCommonFlow(ABC, FlowHandler):
                 },
                 extra=vol.ALLOW_EXTRA,
             )
-        # else:  # Get previous Input data as new default
-        #     i = self.cur_data.inputs[int(self.temp_input_priority)]
-        #     INPUT_SCHEMA = vol.Schema(  # pylint: disable=invalid-name
-        #         {
-        #             vol.Required("value", default=i.get("value")): str,
-        #         },
-        #         extra=vol.ALLOW_EXTRA,
-        #     )
-        # Show the device configuration form
+
         return self.async_show_form(
             step_id="add_input_fixed",
             last_step=False,
@@ -689,8 +654,13 @@ def ws_start_preview(
 ) -> None:
     """Generate a preview based on the template provided in user input."""
     user_input = msg["user_input"]
-    template_str = user_input.get("value_template")
-
+    if (x := user_input.get("control_template")) is not None:
+        template_str = x
+    elif (x := user_input.get("value_template")) is not None:
+        template_str = x
+    else:
+        template_str = ""
+    _LOGGER.debug("ws_start_preview msg: %s", msg)
     try:
         # Render the template with the provided string
         if template_str is not None and tp.is_template_string(template_str):
