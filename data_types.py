@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Dict, Optional  # noqa: UP035
+from typing import Dict, Optional, Any  # noqa: UP035
 
 
 class ControlType(StrEnum):
@@ -69,3 +69,4 @@ class PrioritySwitchData:
     detect_manual: Optional[bool] = True
     automation_pause: Optional[str] = None
     initial_run: Optional[bool] = True
+    output_script: Optional[Any] = None

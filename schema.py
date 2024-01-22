@@ -115,6 +115,13 @@ ADVANCED_CONFIG_SCHEMA = vol.Schema(  # pylint: disable=invalid-name
         vol.Optional(
             "initial_run",  # default=user_input.get("initial_run", True)
         ): selector.BooleanSelector(),
+        vol.Optional(
+            "output_script",  # default=user_input.get("initial_run", True)
+        ): selector.TargetSelector(
+            config=selector.TargetSelectorConfig(
+                entity=selector.EntityFilterSelectorConfig(domain="script")
+            )
+        ),
     },
     extra=vol.ALLOW_EXTRA,
 )

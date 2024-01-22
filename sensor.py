@@ -419,6 +419,20 @@ class PrioritySwitch(SensorEntity):
     async def async_update(self):
         """Update the switch state."""
         self.recalculate_value()
+        if self._config.get("output_script") is not None:
+            await self.hass.services.async_call(
+                domain="script",
+                service="turn_on",
+                service_data={
+                    "variables": {
+                        "value": self.state if self.state is not None else "",
+                        "sensor": self.name,
+                    }
+                },
+                target=self._config["output_script"],
+                blocking=False,
+                context=self._context,
+            )
 
     @property
     def extra_state_attributes(self) -> Mapping[str, Any] | None:
