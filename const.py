@@ -10,4 +10,7 @@ ATTR_CONTROL_TEMPLATE = "control_template"
 ATTR_CONTROL_TEMPLATE_VALUE = "control_template_value"
 ATTR_CONTROL_TYPE = "control_type"
 ATTR_VALUE = "value"
+ATTR_VALUE_TYPE = "value_type"
+ATTR_VALUE_TEMPLATE = "value_template"
+ATTR_VALUE_ENTITY = "value_entity"
 PLATFORMS = ["sensor"]
