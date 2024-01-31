@@ -87,6 +87,8 @@
                     "enabled": "Enabled",
                     "initial_run": "Initial Run",
                     "output": "Output Name",
+                    "output_entity": "The entity that should be triggered. (Supports Switch,Light Brightness and Cover)",
+                    "output_script": "Script to run when output is changed. Will receive fields 'value' and 'sensor' with data.",
                     "output_sequence": "Output Sequence",
                     "status_entity": "Status Entity",
                     "status_entity_icon": "Status Entity Icon",
@@ -209,10 +211,16 @@
                     "enabled": "Enabled",
                     "initial_run": "Initial Run",
                     "output": "Output Name",
+                    "output_entity": "The entity that should be triggered. (Supports Switch,Light Brightness and Cover)",
+                    "output_script": "Script to run when output is changed. Will receive fields 'value' and 'sensor' with data.",
                     "output_sequence": "Output Sequence",
                     "status_entity": "Status Entity",
                     "status_entity_icon": "Status Entity Icon",
                     "switch_name": "Switch Name"
+                },
+                "data_description": {
+                    "output_entity": "The entity that should be triggered. (Supports Switch,Light Brightness and Cover)",
+                    "output_script": "Script to run when output is changed. Will receive fields 'value' and 'sensor' with data."
                 },
                 "description": "You need to fill in all field. For advanced options you can choose Advanced Setup from the main menu.",
                 "title": "Advanced Setup"

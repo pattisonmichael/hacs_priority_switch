@@ -1,7 +1,8 @@
 """Main Priority Switch Entity Class file."""
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from datetime import datetime, timedelta
 import logging
 from typing import Any
 
@@ -35,6 +36,7 @@ from homeassistant.helpers.event import (
     # async_call_later,
     async_track_state_change_event,
     async_track_template_result,
+    async_track_time_interval,
 )
 from homeassistant.helpers.template import Template  # , result_as_boolean
 from homeassistant.helpers.typing import EventType  # ConfigType, DiscoveryInfoType,
@@ -102,7 +104,7 @@ class InputClass(Entity):
         self.name = name
         self.priority = priority
         self.control_type = ControlType(control_type)
-        self.control_state = control_state
+        self._control_state = control_state
         self.control_value = control_value
         self.control_entity = control_entity
         self.control_template = control_template
@@ -133,6 +135,7 @@ class InputClass(Entity):
         self.sun_entity = sun_entity
         self.set_if_in_shadow = set_if_in_shadow
         self.shadow = shadow
+        self.in_sun = False
         self.elevation_lt10 = elevation_lt10
         self.elevation_10to20 = elevation_10to20
         self.elevation_20to30 = elevation_20to30
@@ -140,8 +143,8 @@ class InputClass(Entity):
         self.elevation_40to50 = elevation_40to50
         self.elevation_50to60 = elevation_50to60
         self.elevation_gt60 = elevation_gt60
-
-        self.register_callbacks()
+        self.cleanup_value_callbacks: list[Callable[[], None]] = []
+        self.register_control_callbacks()
 
     #################
 
@@ -214,7 +217,23 @@ class InputClass(Entity):
             self.priority_switch.recalculate_value()
 
     ######
-    def register_callbacks(self):
+
+    @property
+    def control_state(self):
+        """Get the control state."""
+        # Getter method
+        return self._control_state
+
+    @control_state.setter
+    def control_state(self, value):
+        # Setter method
+        if cv.boolean(value):
+            self.register_value_callbacks()
+        else:
+            self.remove_callbacks_value()
+        self._control_state = value
+
+    def register_control_callbacks(self):
         """Register callback functions for entity and template updates.
 
         This is where you would connect to Home Assistant's event system
@@ -269,10 +288,43 @@ class InputClass(Entity):
                 self.control_unregister_callback = result_info.async_remove
                 self._template_result_info = result_info
                 result_info.async_refresh()
-                # return
-        ####
-        # if (itype := self.value_type) == InputType.FIXED:
-        #     self.value = self.val
+
+                # TODO also check shadow position and act acoringly
+                # self.async_on_remove(
+                # self.value_unregister_callback = async_track_state_change_event(
+                #     self.hass, self.value_sensor_source_id, process_entity_state
+                # )
+                # try:
+                #     self.value = self.hass.states.get(self.value_sensor_source_id).state
+                #     self.sun
+                # finally:
+                #     pass
+
+    def register_value_callbacks(self):
+        """Register callback functions for entity and template updates.
+
+        This is where you would connect to Home Assistant's event system
+        """
+
+        @callback
+        def process_entity_state(event: EventType[EventStateChangedData]) -> None:
+            """Handle the sensor state changes."""
+            if (
+                (old_state := event.data["old_state"]) is None
+                or old_state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE)
+                or (new_state := event.data["new_state"]) is None
+                or new_state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE)
+            ):
+                return
+
+            self.control_state = new_state.state
+            self.priority_switch.recalculate_value()
+
+        async def update_sun_callback(now: datetime) -> None:  # pylint: disable=unused-argument
+            """Update the sun calculations."""
+            self.calc_shade_position()
+            self.priority_switch.recalculate_value()
+
         if (itype := self.value_type) == InputType.ENTITY:
             registry = er.async_get(self.hass)
             # Validate + resolve entity registry id to entity_id
@@ -298,18 +350,104 @@ class InputClass(Entity):
                     self.hass,
                     template_var_tups,
                     self._value_handle_results,
-                    # log_fn=log_fn,
                     has_super_template=False,
                 )
                 self.value_unregister_callback = result_info.async_remove
                 self._value_template_result_info = result_info
                 result_info.async_refresh()
-        #         return
+        elif itype == InputType.SUN:
+            if self.sun_entity is not None:
+                registry = er.async_get(self.hass)
+                # Validate + resolve entity registry id to entity_id
+                self.value_sensor_source_id = er.async_validate_entity_id(
+                    registry, self.sun_entity
+                )
+                if self.value_sensor_source_id is not None:
+                    self.cleanup_value_callbacks.append(
+                        async_track_time_interval(
+                            self.hass,
+                            update_sun_callback,
+                            timedelta(minutes=self.update_interval),
+                            cancel_on_shutdown=True,
+                        )
+                    )
+
+                    self.calc_shade_position()
+                    _LOGGER.debug(
+                        "Set in sun: %s with position: %s", self.in_sun, self.value
+                    )
+                else:
+                    _LOGGER.error(
+                        "Couldn't find sun entity: %s", self.value_sensor_source_id
+                    )
 
     # TODO Sun Value Type
     ####
+    @callback
+    def calc_shade_position(self):
+        """Calculates position of shutter according to sun."""
 
-    ###
+        value = 0
+        sun = False
+        elevation = self.hass.states.get(self.value_sensor_source_id).attributes.get(
+            "elevation", 0
+        )
+        azimuth = self.hass.states.get(self.value_sensor_source_id).attributes.get(
+            "azimuth", 0
+        )
+        facadeentry = self.building_deviation + self.offset_entry
+        facadeexit = self.building_deviation + self.offset_exit
+        if elevation <= 0:
+            sun = False
+        elif facadeentry < 0:
+            helper = facadeentry + 360
+            if azimuth >= helper or azimuth <= facadeexit:
+                sun = True
+            else:
+                sun = False
+        # Azimuth needs to be smaller than helper or larger than facadeentry
+        elif facadeexit > 360:
+            helper = facadeexit - 360
+            if azimuth <= helper or azimuth >= facadeentry:
+                sun = True
+            else:
+                sun = False
+            # Check if Azimuth is between facadeentry and facadeexit
+        elif azimuth >= facadeentry and azimuth <= facadeexit:
+            sun = True
+        else:
+            sun = False
+
+        if sun:
+            if elevation <= 10:
+                value = self.elevation_lt10
+            elif elevation <= 20:
+                value = self.elevation_10to20
+            elif elevation <= 30:
+                value = self.elevation_20to30
+            elif elevation <= 40:
+                value = self.elevation_30to40
+            elif elevation <= 50:
+                value = self.elevation_40to50
+            elif elevation <= 60:
+                value = self.elevation_50to60
+            else:
+                value = self.elevation_gt60
+        # in shadow
+        elif self.set_if_in_shadow:
+            value = self.shadow
+            _LOGGER.debug("Set in Shadow: %s", value)
+            sun = True
+        _LOGGER.debug(
+            "Set height to: %s Sun: %s, Azimuth: %i, Elevation: %i",
+            value,
+            sun,
+            azimuth,
+            elevation,
+        )
+        #        return value, sun
+        self.value = value
+        self.in_sun = sun
 
     ###
     def remove_callbacks(self):
@@ -321,6 +459,14 @@ class InputClass(Entity):
             self.control_unregister_callback()
         if self.value_unregister_callback is not None:
             self.value_unregister_callback()
+
+    def remove_callbacks_value(self):
+        """Deregister callback functions for entity and template updates.
+
+        This is where you would disconnect from Home Assistant's event system
+        """
+        while self.cleanup_value_callbacks:
+            self.cleanup_value_callbacks.pop()()
 
     # def control_entity_callback_old(self, new_state):
     #     """Callback for the control entity."""  # noqa: D401
@@ -659,6 +805,6 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     # )
     # for inp in self._inputs:
     #     print(inp)
-    _LOGGER.debug("Finished adding priority switch:\n%s", config_entry)
+    _LOGGER.debug("Finished adding priority switch:\n%s", config_entry.data)
     # Return True if setup was successful
     return True

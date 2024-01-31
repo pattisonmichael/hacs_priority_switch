@@ -106,13 +106,15 @@ def validate_input(
         #     errors.update({"priority": "priority_dup"})
         if user_input.get("control_type") is None:
             errors.update({"control_type": "control_type_req"})
-        if user_input.get("control_type") == "entity" and not cv.valid_entity_id(
+        if user_input.get(
+            "control_type"
+        ) == ControlType.ENTITY and not cv.valid_entity_id(
             user_input.get("control_entity")
             if user_input.get("control_entity") is not None
             else ""
         ):
             errors.update({"control_entity": "control_entity_req"})
-        if user_input.get("control_type") == "template" and (
+        if user_input.get("control_type") == ControlType.TEMPLATE and (
             user_input.get("control_template") is None
             or not cv.template(user_input.get("control_template"))
         ):
@@ -337,16 +339,18 @@ class PrioritySwitchCommonFlow(ABC, FlowHandler):
                 errors = val.get("errors")
 
         # i = (
-        user_input = (
-            self.cur_data.inputs[self.temp_input_priority]
-            if len(self.cur_data.inputs) > 0 and self.temp_input_priority is not None
-            else user_input
-            if user_input is not None
-            else {
-                "priority": int(max(self.cur_data.inputs, default=0)) + 1,
-                "new": True,
-            }
-        )
+        if not errors:
+            user_input = (
+                self.cur_data.inputs[self.temp_input_priority]
+                if len(self.cur_data.inputs) > 0
+                and self.temp_input_priority is not None
+                else user_input
+                if user_input is not None
+                else {
+                    "priority": int(max(self.cur_data.inputs, default=0)) + 1,
+                    "new": True,
+                }
+            )
         # if user_input is None:
         #     user_input = {'priority': int(max(self.cur_data.inputs, default=0)) + 1}
 
@@ -524,6 +528,10 @@ class PrioritySwitchCommonFlow(ABC, FlowHandler):
             # self.cur_data.update(user_input)
             for key, value in user_input.items():
                 setattr(self.cur_data, key, value)
+            if user_input.get("output_entity", None) is None:
+                self.cur_data.output_entity = None
+            if user_input.get("output_script", None) is None:
+                self.cur_data.output_script = None
             return await self.async_step_menu()
 
         # user_input = self.cur_data.inputs.get(self.temp_input_priority)

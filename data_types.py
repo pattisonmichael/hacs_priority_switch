@@ -70,3 +70,4 @@ class PrioritySwitchData:
     automation_pause: Optional[str] = None
     initial_run: Optional[bool] = True
     output_script: Optional[Any] = None
+    output_entity: Optional[str] = None

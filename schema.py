@@ -116,10 +116,19 @@ ADVANCED_CONFIG_SCHEMA = vol.Schema(  # pylint: disable=invalid-name
             "initial_run",  # default=user_input.get("initial_run", True)
         ): selector.BooleanSelector(),
         vol.Optional(
-            "output_script",  # default=user_input.get("initial_run", True)
+            "output_script",
         ): selector.TargetSelector(
             config=selector.TargetSelectorConfig(
                 entity=selector.EntityFilterSelectorConfig(domain="script")
+            )
+        ),
+        vol.Optional(
+            "output_entity",
+        ): selector.TargetSelector(
+            config=selector.TargetSelectorConfig(
+                entity=selector.EntityFilterSelectorConfig(
+                    domain=["switch", "input_boolean", "light", "cover"]
+                )
             )
         ),
     },

@@ -38,7 +38,13 @@
           "deadtime": "Deadtime",
           "detect_manual": "Detect Manual",
           "automation_pause": "Automation Pause",
-          "initial_run": "Initial Run"
+          "initial_run": "Initial Run",
+          "output_script": "Script to run when output is changed. Will receive fields 'value' and 'sensor' with data.",
+          "output_entity": "The entity that should be triggered. (Supports Switch,Light Brightness and Cover)"
+        },
+        "data_description": {
+          "output_script": "Script to run when output is changed. Will receive fields 'value' and 'sensor' with data.",
+          "output_entity": "The entity that should be triggered. (Supports Switch,Light Brightness and Cover)"
         }
       },
       "add": {
@@ -160,7 +166,13 @@
           "deadtime": "Deadtime",
           "detect_manual": "Detect Manual",
           "automation_pause": "Automation Pause",
-          "initial_run": "Initial Run"
+          "initial_run": "Initial Run",
+          "output_script": "Script to run when output is changed. Will receive fields 'value' and 'sensor' with data.",
+          "output_entity": "The entity that should be triggered. (Supports Switch,Light Brightness and Cover)"
+        },
+        "data_description": {
+          "output_script": "Script to run when output is changed. Will receive fields 'value' and 'sensor' with data.",
+          "output_entity": "The entity that should be triggered. (Supports Switch,Light Brightness and Cover)"
         }
       },
       "add": {
