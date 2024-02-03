@@ -40,7 +40,7 @@ from homeassistant.helpers.event import (
 )
 from homeassistant.helpers.template import Template  # , result_as_boolean
 from homeassistant.helpers.typing import EventType  # ConfigType, DiscoveryInfoType,
-
+from voluptuous import error as vol_err
 from .const import (
     ATTR_CONTROL_ENTITY,
     ATTR_CONTROL_ENTITY_VALUE,
@@ -385,7 +385,7 @@ class InputClass(Entity):
     ####
     @callback
     def calc_shade_position(self):
-        """Calculates position of shutter according to sun."""
+        """Calculate position of shutter according to sun."""
 
         value = 0
         sun = False
@@ -646,6 +646,54 @@ class PrioritySwitch(SensorEntity):
                 blocking=False,
                 context=self._context,
             )
+        if (x := self._config.get("output_entity")) is not None:
+            for entity_id in x["entity_id"]:
+                entity = self.hass.states.get(entity_id)
+                if entity.domain == "light":
+                    _LOGGER.debug("Light entity: %s", entity)
+                    await self.hass.services.async_call(
+                        domain="light",
+                        service="turn_on",
+                        service_data={
+                            "brightness_pct": int(self.state)
+                            if self.state is not None
+                            else 0
+                        },
+                        target=x,
+                        blocking=False,
+                        context=self._context,
+                    )
+                elif entity.domain in ["switch", "input_boolean"]:
+                    _LOGGER.debug("Switch/Input_Boolean entity: %s", entity)
+                    try:
+                        state = float(self.state)
+                    except ValueError:
+                        state = self.state
+                    try:
+                        service = "turn_on" if cv.boolean(state) else "turn_off"
+                    except vol_err.Invalid:
+                        service = "turn_off"
+                    await self.hass.services.async_call(
+                        domain="switch"
+                        if entity.domain == "switch"
+                        else "input_boolean",
+                        service=service,
+                        target=x,
+                        blocking=False,
+                        context=self._context,
+                    )
+                elif entity.domain == "cover":
+                    _LOGGER.debug("Cover entity: %s", entity)
+                    await self.hass.services.async_call(
+                        domain="cover",
+                        service="set_cover_position",
+                        service_data={
+                            "position": int(self.state) if self.state is not None else 0
+                        },
+                        target=x,
+                        blocking=False,
+                        context=self._context,
+                    )
 
     @property
     def extra_state_attributes(self) -> Mapping[str, Any] | None:
