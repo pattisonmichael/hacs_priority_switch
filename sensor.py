@@ -6,6 +6,8 @@ from datetime import datetime, timedelta
 import logging
 from typing import Any
 
+from voluptuous import error as vol_err
+
 from homeassistant.components.sensor import SensorEntity
 
 # from homeassistant.components.switch import SwitchEntity
@@ -40,7 +42,7 @@ from homeassistant.helpers.event import (
 )
 from homeassistant.helpers.template import Template  # , result_as_boolean
 from homeassistant.helpers.typing import EventType  # ConfigType, DiscoveryInfoType,
-from voluptuous import error as vol_err
+
 from .const import (
     ATTR_CONTROL_ENTITY,
     ATTR_CONTROL_ENTITY_VALUE,
@@ -498,6 +500,7 @@ class PrioritySwitch(SensorEntity):
     def __init__(self, hass, config):  # noqa: D107
         self._name = config["switch_name"]
         self._friendly_name = config["switch_name_friendly"]
+        self._only_send_on_change = config["only_send_on_change"] | True
         self._config = config
         self._state = None
         # self._attr_is_on = config["enabled"]
@@ -633,7 +636,7 @@ class PrioritySwitch(SensorEntity):
     async def async_update(self):
         """Update the switch state."""
         self.recalculate_value()
-        if self.state == self._prev_value and self.only_send_on_change:
+        if self.state == self._prev_value and self._only_send_on_change:
             return
         else:
             self._prev_value = self.state
