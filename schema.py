@@ -116,6 +116,9 @@ ADVANCED_CONFIG_SCHEMA = vol.Schema(  # pylint: disable=invalid-name
             "initial_run",  # default=user_input.get("initial_run", True)
         ): selector.BooleanSelector(),
         vol.Optional(
+            "only_send_on_change",  # default=user_input.get("initial_run", True)
+        ): selector.BooleanSelector(),
+        vol.Optional(
             "output_script",
         ): selector.TargetSelector(
             config=selector.TargetSelectorConfig(

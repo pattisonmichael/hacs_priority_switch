@@ -492,6 +492,7 @@ class PrioritySwitch(SensorEntity):
     _control_state = None
     _unrecorded_attributes: frozenset({"active_input", "inputs"})
     _attr_has_entity_name = True
+    _prev_value = None
     # init_complete = True
 
     def __init__(self, hass, config):  # noqa: D107
@@ -632,6 +633,10 @@ class PrioritySwitch(SensorEntity):
     async def async_update(self):
         """Update the switch state."""
         self.recalculate_value()
+        if self.state == self._prev_value and self.only_send_on_change:
+            return
+        else:
+            self._prev_value = self.state
         if self._config.get("output_script") is not None:
             await self.hass.services.async_call(
                 domain="script",

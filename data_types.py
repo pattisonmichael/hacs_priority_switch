@@ -71,3 +71,4 @@ class PrioritySwitchData:
     initial_run: Optional[bool] = True
     output_script: Optional[Any] = None
     output_entity: Optional[str] = None
+    only_send_on_change: Optional[bool] = True
