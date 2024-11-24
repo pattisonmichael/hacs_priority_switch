@@ -101,9 +101,19 @@
                 "description": "You need to fill in all field. For advanced options you can choose Advanced Setup from the main menu.",
                 "title": "Advanced Setup"
             },
+            "clone": {
+                "data": {
+                    "clonemenu": "Available Switches",
+                    "enabled": "Enabled",
+                    "switch_name_friendly": "Switch Name"
+                },
+                "description": "Here you can clone a switch and all the required inputs for it.",
+                "title": "Clone existing switch"
+            },
             "menu": {
                 "data": {
                     "enabled": "Enabled",
+                    "mainmenu": "Main Menu",
                     "switch_name_friendly": "Switch Name"
                 },
                 "description": "Here you can setup a switch and all the required inputs for it.",
@@ -229,9 +239,19 @@
                 "description": "You need to fill in all field. For advanced options you can choose Advanced Setup from the main menu.",
                 "title": "Advanced Setup"
             },
+            "clone": {
+                "data": {
+                    "clonemenu": "Available Switches",
+                    "enabled": "Enabled",
+                    "switch_name_friendly": "Switch Name"
+                },
+                "description": "Here you can clone a switch and all the required inputs for it.",
+                "title": "Clone existing switch"
+            },
             "menu": {
                 "data": {
                     "enabled": "Enabled",
+                    "mainmenu": "Main Menu",
                     "switch_name_friendly": "Switch Name"
                 },
                 "description": "Here you can setup a switch and all the required inputs for it.",
@@ -272,11 +292,18 @@
                 "Template": "Value Template"
             }
         },
+        "clonemenu": {
+            "options": {
+                "abort": "Abort",
+                "clone": "Clone Switch:"
+            }
+        },
         "mainmenu": {
             "options": {
                 "add": "Add Input",
                 "advanced": "Advance Setup",
                 "basic": "Basic Setup",
+                "clone": "Clone existing Switch",
                 "del": "Delete Input",
                 "input_1": "Edit Input 1: ",
                 "input_10": "Edit Input 10: ",
@@ -307,6 +334,7 @@
                 "add": "Add Input",
                 "advanced": "Advance Setup",
                 "basic": "Basic Setup",
+                "clone": "Clone existing Switchbak",
                 "del": "Delete Input",
                 "input1": "Edit Input 1: {input_name1}",
                 "input10": "Edit Input 10: {input_name10}",

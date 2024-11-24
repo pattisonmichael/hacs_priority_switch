@@ -1,4 +1,5 @@
 """Main Priority Switch Entity Class file."""
+
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
@@ -16,6 +17,8 @@ from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 
 # from homeassistant.core import HomeAssistant
 from homeassistant.core import (
+    Event,
+    EventStateChangedData,
     # CALLBACK_TYPE,
     # Context,
     HomeAssistant,
@@ -31,7 +34,7 @@ from homeassistant.helpers import (
 )
 from homeassistant.helpers.entity import Entity  # , EntityDescription
 from homeassistant.helpers.event import (
-    EventStateChangedData,
+    # EventStateChangedData,
     TrackTemplate,
     TrackTemplateResult,
     TrackTemplateResultInfo,
@@ -41,8 +44,8 @@ from homeassistant.helpers.event import (
     async_track_time_interval,
 )
 from homeassistant.helpers.template import Template  # , result_as_boolean
-from homeassistant.helpers.typing import EventType  # ConfigType, DiscoveryInfoType,
 
+# from homeassistant.helpers.typing import EventType  # ConfigType, DiscoveryInfoType,
 from .const import (
     ATTR_CONTROL_ENTITY,
     ATTR_CONTROL_ENTITY_VALUE,
@@ -155,7 +158,7 @@ class InputClass(Entity):
     @callback
     def _handle_results(
         self,
-        event: EventType[EventStateChangedData] | None,
+        event: Event[EventStateChangedData] | None,
         updates: list[TrackTemplateResult],
     ) -> None:
         """Call back the results to the attributes."""
@@ -188,7 +191,7 @@ class InputClass(Entity):
     @callback
     def _value_handle_results(
         self,
-        event: EventType[EventStateChangedData] | None,
+        event: Event[EventStateChangedData] | None,
         updates: list[TrackTemplateResult],
     ) -> None:
         """Call back the results to the attributes."""
@@ -242,7 +245,7 @@ class InputClass(Entity):
         """
 
         @callback
-        def process_entity_state(event: EventType[EventStateChangedData]) -> None:
+        def process_entity_state(event: Event[EventStateChangedData]) -> None:
             """Handle the sensor state changes."""
             if (
                 (old_state := event.data["old_state"]) is None
@@ -309,7 +312,7 @@ class InputClass(Entity):
         """
 
         @callback
-        def process_entity_state(event: EventType[EventStateChangedData]) -> None:
+        def process_entity_state(event: Event[EventStateChangedData]) -> None:
             """Handle the sensor state changes."""
             if (
                 (old_state := event.data["old_state"]) is None
@@ -322,6 +325,7 @@ class InputClass(Entity):
             self.control_state = new_state.state
             self.priority_switch.recalculate_value()
 
+        @callback
         async def update_sun_callback(now: datetime) -> None:  # pylint: disable=unused-argument
             """Update the sun calculations."""
             self.calc_shade_position()
@@ -470,37 +474,36 @@ class InputClass(Entity):
         while self.cleanup_value_callbacks:
             self.cleanup_value_callbacks.pop()()
 
-    # def control_entity_callback_old(self, new_state):
-    #     """Callback for the control entity."""  # noqa: D401
-    #     self.priority_switch.recalculate_state()
-
-    # def control_template_callback(self, new_state):
-    #     """Callback for the control template."""  # noqa: D401
-    #     self.priority_switch.recalculate_state()
-
-    # def input_entity_callback(self, new_state):
-    #     """Callback for the input entity."""  # noqa: D401
-    #     self.priority_switch.recalculate_state()
-
-    # def input_template_callback(self, new_state):
-    #     """Callback for the input template."""  # noqa: D401
-    #     self.priority_switch.recalculate_state()
-
 
 class PrioritySwitch(SensorEntity):
     """Main PrioritySwitch class."""
 
     _highest_active_priority = None
     _control_state = None
-    _unrecorded_attributes: frozenset({"active_input", "inputs"})
+    _unrecorded_attributes: frozenset({"active_input", "inputs"})  # type: ignore[reportInvalidTypeForm ]
     _attr_has_entity_name = True
     _prev_value = None
+    _last_command_time = None
+    _command_grace_period = None  # Adjust based on the maximum expected operation time
+    _is_paused = False
+    _output_unregister_callback: list[Callable[[], None]] = []
     # init_complete = True
 
     def __init__(self, hass, config):  # noqa: D107
         self._name = config["switch_name"]
         self._friendly_name = config["switch_name_friendly"]
-        self._only_send_on_change = config["only_send_on_change"] | True
+        self._only_send_on_change = config.get("only_send_on_change", True)
+        self._deadtime = config.get("deadtime")
+        self._command_grace_period = (
+            timedelta(**self._deadtime) if self._deadtime is not None else None
+        )
+        self._detect_manual = config.get("detect_manual", False)
+        self._automation_pause = (
+            timedelta(**self._deadtime)
+            if config.get("automation_pause") is not None
+            else None
+        )
+
         self._config = config
         self._state = None
         # self._attr_is_on = config["enabled"]
@@ -522,6 +525,7 @@ class PrioritySwitch(SensorEntity):
         # hw_version="config.hwversion",
         # self._sensor = sensor  # Reference to the PrioritySensor instance
         # self._attr_device_info = device.dict_repr
+        self.register_output_callback()
 
     @property
     def name(self):  # noqa: D102
@@ -621,6 +625,59 @@ class PrioritySwitch(SensorEntity):
             input_obj.remove_callbacks()
         await super().async_will_remove_from_hass()
 
+    def register_output_callback(self):
+        """Register callbacks for output ws."""
+
+        @callback
+        async def handle_output_entity_state_change(
+            event: Event[EventStateChangedData],
+        ) -> None:
+            # Check if the state change is for the entity we're interested in
+            # if event.data["entity_id"] != self._config.get(output_entity):
+            #     return
+
+            # If we're paused, ignore state changes
+            if self._is_paused:
+                return
+
+            now = datetime.now()
+
+            # Check if we're within the grace period of an automated command
+            if self._last_command_time and now - self._last_command_time <= timedelta(
+                **self._deadtime
+            ):
+                # This change is considered part of the automated command; no action needed
+                _LOGGER.debug("Change within grace period, considered as automated.")
+            else:
+                # Detected a change outside the grace period, likely manual
+                _LOGGER.debug(
+                    "Change detected outside grace period, likely manual. Pausing operations."
+                )
+                self._is_paused = True
+
+        if (x := self._config.get("output_entity")) is not None:
+            registry = er.async_get(self.hass)
+            # Validate + resolve entity registry id to entity_id
+            for entity in x["entity_id"]:
+                # try:
+                output_entity = er.async_validate_entity_id(registry, entity)
+                # self.async_on_remove(
+                self._output_unregister_callback.append(
+                    async_track_state_change_event(
+                        self.hass, output_entity, handle_output_entity_state_change
+                    )
+                )
+            # except:
+            #    _LOGGER.debug("Error tracking output entity: %s", entity)
+
+    def remove_callbacks_value(self):
+        """Deregister callback functions for entity and template updates.
+
+        This is where you would disconnect from Home Assistant's event system
+        """
+        while self._output_unregister_callback:
+            self._output_unregister_callback.pop()()
+
     # async def async_turn_on(self, **kwargs):
     #     """Turn the switch on."""
     #     self._state = True
@@ -636,10 +693,23 @@ class PrioritySwitch(SensorEntity):
     async def async_update(self):
         """Update the switch state."""
         self.recalculate_value()
-        if self.state == self._prev_value and self._only_send_on_change:
+        now = datetime.now()
+        if self._is_paused and (
+            (now - (self._last_command_time or datetime.min))
+            >= timedelta(**self._deadtime)
+        ):
+            #####
+            self._is_paused = False
+
+        #####
+        if (
+            self.state == self._prev_value
+            and self._only_send_on_change
+            or self._is_paused
+        ):
             return
-        else:
-            self._prev_value = self.state
+
+        self._prev_value = self.state
         if self._config.get("output_script") is not None:
             await self.hass.services.async_call(
                 domain="script",
@@ -786,12 +856,14 @@ class PrioritySensor(SensorEntity):
     def value(self):
         """Value."""
         # TODO check if still called or required
+        _LOGGER.debug("PrioritySensor get value property still used")
         return self._value
 
     def set_value(self, value):
         """Set Value."""
         # TODO check if still called or required
         self._value = value
+        _LOGGER.debug("PrioritySensor set value property still used")
         self.schedule_update_ha_state()
 
 

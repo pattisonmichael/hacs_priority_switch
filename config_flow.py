@@ -1,4 +1,5 @@
 """Config flow for Priority Switch integration."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -84,10 +85,9 @@ def string_to_boolean(s: str):
     """Convert Boolean to String to actual boolean or return None if not boolean."""
     if s.lower() == "true":
         return True
-    elif s.lower() == "false":
+    if s.lower() == "false":
         return False
-    else:
-        return None
+    return None
 
 
 def validate_input(
@@ -158,7 +158,7 @@ class PrioritySwitchCommonFlow(ABC, FlowHandler):
     """Base class for flows."""
 
     VERSION = 1
-    data: Optional[dict[str, Any]] = {}
+    data: Optional[dict[str, Any]] = {}  # noqa: UP007
     temp_input_priority = None  # to remember original priority of input while editing
     translations = None
 
@@ -182,16 +182,18 @@ class PrioritySwitchCommonFlow(ABC, FlowHandler):
             self.cur_data.switch_name_friendly = user_input.get("switch_name_friendly")
             if user_input.get("mainmenu") == "advanced":
                 return await self.async_step_advanced()
-            elif user_input.get("mainmenu") == "add":
+            if user_input.get("mainmenu") == "add":
                 return await self.async_step_add()
-            elif user_input.get("mainmenu") == "del":
+            if user_input.get("mainmenu") == "del":
                 return await self.async_step_del()
-            elif user_input.get("mainmenu") == "save":
+            if user_input.get("mainmenu") == "clone":
+                return await self.async_step_clone()
+            if user_input.get("mainmenu") == "save":
                 self.cur_data.switch_name = cv.slugify(
                     self.cur_data.switch_name_friendly
                 )
                 return self.finish_flow()
-            elif user_input.get("mainmenu")[:5] == "input":
+            if user_input.get("mainmenu")[:5] == "input":
                 self.temp_input_priority = user_input.get("mainmenu")[5:]
                 return await self.async_step_add()
 
@@ -203,7 +205,7 @@ class PrioritySwitchCommonFlow(ABC, FlowHandler):
         # if len(self.cur_data.inputs) > 0:
         for val in self.cur_data.inputs.values():
             # for prio in self.cur_data.inputs:
-            MAINMENU.append(
+            MAINMENU.append(  # noqa: PERF401
                 selector.SelectOptionDict(
                     value="input" + str(val["priority"]),
                     label=self.translations.get(
@@ -213,8 +215,11 @@ class PrioritySwitchCommonFlow(ABC, FlowHandler):
                     + str(val["name"]),
                 )
             )
-        MAINMENU.append(selector.SelectOptionDict(value="del", label="del"))
+        if self.cur_data.switch_name_friendly is None:
+            MAINMENU.append(selector.SelectOptionDict(value="clone", label="clone"))
+
         if self.cur_data.switch_name_friendly is not None:
+            MAINMENU.append(selector.SelectOptionDict(value="del", label="del"))
             MAINMENU.append(selector.SelectOptionDict(value="save", label="save"))
             ##
         description_placeholders = {}
@@ -238,9 +243,12 @@ class PrioritySwitchCommonFlow(ABC, FlowHandler):
                 }
             ),
             description_placeholders=description_placeholders,
-            last_step=False
-            if self.cur_data.switch_name is None or len(self.cur_data.inputs) == 0
-            else True,
+            last_step=not (
+                self.cur_data.switch_name is None or len(self.cur_data.inputs) == 0
+            ),
+            # last_step=False
+            # if self.cur_data.switch_name is None or len(self.cur_data.inputs) == 0
+            # else True,
         )
 
     async def async_step_del(self, user_input=None):
@@ -254,7 +262,7 @@ class PrioritySwitchCommonFlow(ABC, FlowHandler):
 
         MENU = []  # pylint: disable=invalid-name
         for val in self.cur_data.inputs.values():
-            MENU.append(
+            MENU.append(  # noqa: PERF401
                 selector.SelectOptionDict(
                     value="input" + str(val["priority"]),
                     label=f"input{val['priority']} {val['name']}",  # pylint: disable=line-too-long
@@ -272,6 +280,56 @@ class PrioritySwitchCommonFlow(ABC, FlowHandler):
                             options=MENU,
                             mode=selector.SelectSelectorMode.LIST,
                             translation_key="menu",
+                        ),
+                    )
+                }
+            ),
+        )
+
+    async def async_step_clone(self, user_input=None):
+        """Handle the device configuration submenu."""
+        if user_input is not None:
+            # Process the device configuration input and go back to the menu
+            if user_input["clonemenu"] == "abort":
+                return self.async_abort(reason="abort")
+            # if user_input["clonemenu"] != "back":
+            #    self.cur_data.inputs.pop(str(int(user_input.get("menu")[5:])))
+            clone = self.hass.config_entries.options.hass.data["entity_platform"][
+                "priorityswitch"
+            ][int(user_input.get("clonemenu")[6:])]
+            name = self.cur_data.switch_name
+            friendly_name = self.cur_data.switch_name_friendly
+            # print(clone)
+            self.cur_data = PrioritySwitchData(**clone.config_entry.data)
+            self.cur_data.switch_name = name
+            self.cur_data.switch_name_friendly = friendly_name
+            # self.temp_input_priority = None
+            return await self.async_step_menu()
+
+        MENU = []  # pylint: disable=invalid-name
+        for index, val in enumerate(
+            self.hass.config_entries.options.hass.data["entity_platform"][
+                "priorityswitch"
+            ]
+        ):
+            MENU.append(
+                selector.SelectOptionDict(
+                    value="clone_" + str(index),
+                    label=f"{self.translations.get('component.priorityswitch.selector.clonemenu.options.clone')} {val.config_entry.title}",
+                )
+            )
+        MENU.append(selector.SelectOptionDict(value="abort", label="aback"))
+        # Show the device configuration form
+        return self.async_show_form(
+            step_id="clone",
+            last_step=False,
+            data_schema=vol.Schema(
+                {
+                    vol.Required("clonemenu"): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=MENU,
+                            mode=selector.SelectSelectorMode.LIST,
+                            translation_key="clonemenu",
                         ),
                     )
                 }
@@ -312,9 +370,9 @@ class PrioritySwitchCommonFlow(ABC, FlowHandler):
                                 user_input,
                             )
                         else:
-                            self.cur_data.inputs[
-                                str(user_input["priority"])
-                            ] = user_input
+                            self.cur_data.inputs[str(user_input["priority"])] = (
+                                user_input
+                            )
                     else:  # Reorder
                         insert_and_shift_up(
                             self.cur_data.inputs,
@@ -324,11 +382,11 @@ class PrioritySwitchCommonFlow(ABC, FlowHandler):
                     self.temp_input_priority = user_input["priority"]
                     if user_input["value_type"] == InputType.FIXED:
                         return await self.async_step_add_input_fixed(user_input)
-                    elif user_input["value_type"] == InputType.ENTITY:
+                    if user_input["value_type"] == InputType.ENTITY:
                         return await self.async_step_add_input_entity(user_input)
-                    elif user_input["value_type"] == InputType.TEMPLATE:
+                    if user_input["value_type"] == InputType.TEMPLATE:
                         return await self.async_step_add_input_template(user_input)
-                    elif user_input["value_type"] == InputType.SUN:
+                    if user_input["value_type"] == InputType.SUN:
                         return await self.async_step_add_input_sun(user_input)
                     user_input = await validate_input(
                         self.hass, user_input, self.cur_data
@@ -503,12 +561,12 @@ class PrioritySwitchCommonFlow(ABC, FlowHandler):
             user_input = self.cur_data.inputs[str(self.temp_input_priority)]
             # if self.temp_input_priority is None:
             # Define a schema for the "inputs" part of the configuration
-            INPUT_SCHEMA = vol.Schema(  # pylint: disable=invalid-name
-                {
-                    vol.Required("value"): str,
-                },
-                extra=vol.ALLOW_EXTRA,
-            )
+        INPUT_SCHEMA = vol.Schema(  # pylint: disable=invalid-name
+            {
+                vol.Required("value"): str,
+            },
+            extra=vol.ALLOW_EXTRA,
+        )
 
         return self.async_show_form(
             step_id="add_input_fixed",
@@ -662,9 +720,9 @@ def ws_start_preview(
 ) -> None:
     """Generate a preview based on the template provided in user input."""
     user_input = msg["user_input"]
-    if (x := user_input.get("control_template")) is not None:
-        template_str = x
-    elif (x := user_input.get("value_template")) is not None:
+    if (x := user_input.get("control_template")) is not None or (
+        x := user_input.get("value_template")
+    ) is not None:
         template_str = x
     else:
         template_str = ""

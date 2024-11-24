@@ -22,7 +22,17 @@
         "description": "Here you can setup a switch and all the required inputs for it.",
         "data": {
           "switch_name_friendly": "Switch Name",
-          "enabled": "Enabled"
+          "enabled": "Enabled",
+          "mainmenu": "Main Menu"
+        }
+      },
+      "clone": {
+        "title": "Clone existing switch",
+        "description": "Here you can clone a switch and all the required inputs for it.",
+        "data": {
+          "switch_name_friendly": "Switch Name",
+          "enabled": "Enabled",
+          "clonemenu": "Available Switches"
         }
       },
       "advanced": {
@@ -150,7 +160,17 @@
         "description": "Here you can setup a switch and all the required inputs for it.",
         "data": {
           "switch_name_friendly": "Switch Name",
-          "enabled": "Enabled"
+          "enabled": "Enabled",
+          "mainmenu": "Main Menu"
+        }
+      },
+      "clone": {
+        "title": "Clone existing switch",
+        "description": "Here you can clone a switch and all the required inputs for it.",
+        "data": {
+          "switch_name_friendly": "Switch Name",
+          "enabled": "Enabled",
+          "clonemenu": "Available Switches"
         }
       },
       "advanced": {
@@ -304,7 +324,14 @@
         "input_20": "Edit Input 20: ",
         "del": "Delete Input",
         "save": "Save",
+        "clone": "Clone existing Switch",
         "reorder": "Reorder Inputs"
+      }
+    },
+    "clonemenu": {
+      "options": {
+        "clone": "Clone Switch:",
+        "abort": "Abort"
       }
     },
     "mainmenubak": {
@@ -334,7 +361,8 @@
         "input20": "Edit Input 20: {input_name20}",
         "del": "Delete Input",
         "save": "Save",
-        "reorder": "Reorder Inputs"
+        "reorder": "Reorder Inputs",
+        "clone": "Clone existing Switchbak"
       }
     }
   }
