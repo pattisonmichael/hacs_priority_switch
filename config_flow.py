@@ -294,28 +294,33 @@ class PrioritySwitchCommonFlow(ABC, FlowHandler):
                 return self.async_abort(reason="abort")
             # if user_input["clonemenu"] != "back":
             #    self.cur_data.inputs.pop(str(int(user_input.get("menu")[5:])))
-            clone = self.hass.config_entries.options.hass.data["entity_platform"][
-                "priorityswitch"
-            ][int(user_input.get("clonemenu")[6:])]
+            # clone = self.hass.config_entries.options.hass.data["entity_platform"][
+            #     "priorityswitch"
+            # ][int(user_input.get("clonemenu")[6:])]
+            entries = self.hass.config_entries.async_entries(DOMAIN)
+            clone = next(
+                (
+                    obj
+                    for obj in entries
+                    if obj.entry_id == user_input.get("clonemenu")[6:]
+                ),
+                None,
+            )
             name = self.cur_data.switch_name
             friendly_name = self.cur_data.switch_name_friendly
             # print(clone)
-            self.cur_data = PrioritySwitchData(**clone.config_entry.data)
+            self.cur_data = PrioritySwitchData(**clone.data)
             self.cur_data.switch_name = name
             self.cur_data.switch_name_friendly = friendly_name
             # self.temp_input_priority = None
             return await self.async_step_menu()
 
         MENU = []  # pylint: disable=invalid-name
-        for index, val in enumerate(
-            self.hass.config_entries.options.hass.data["entity_platform"][
-                "priorityswitch"
-            ]
-        ):
+        for val in self.hass.config_entries.async_entries(DOMAIN):
             MENU.append(
                 selector.SelectOptionDict(
-                    value="clone_" + str(index),
-                    label=f"{self.translations.get('component.priorityswitch.selector.clonemenu.options.clone')} {val.config_entry.title}",
+                    value="clone_" + val.entry_id,
+                    label=f"{self.translations.get('component.priorityswitch.selector.clonemenu.options.clone')} {val.title}",
                 )
             )
         MENU.append(selector.SelectOptionDict(value="abort", label="aback"))
