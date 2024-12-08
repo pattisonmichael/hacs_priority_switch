@@ -592,6 +592,7 @@ class PrioritySwitch(SensorEntity):
         #    return
 
         # self.set_state(new_state)
+        # previousValue = self._value
         self._highest_active_priority = self._get_highest_active_input()
         if self._highest_active_priority is None:
             # new_state = False
@@ -601,6 +602,48 @@ class PrioritySwitch(SensorEntity):
             #     self._inputs[self._highest_active_priority].control_state
             # )
             self._value = self._inputs[self._highest_active_priority].value
+        #
+
+        # only send update if value is different when configured
+        # if self._only_send_on_change and previousValue==self._value:
+        #    return
+
+        # Trigger output Entities
+        # if (
+        #     x := self._config.get("output_entity")
+        # ) is not None and self._value is not None:
+        #     registry = er.async_get(self.hass)
+        #     # Validate + resolve entity registry id to entity_id
+        #     for entity in x["entity_id"]:
+        #         # try:
+        #         output_entity = er.async_validate_entity_id(registry, entity)
+        #         self.hass.states.async_set(
+        #             entity_id=output_entity, new_state=self._value
+        #         )
+
+        #         # except:
+        #         _LOGGER.debug(
+        #             "Sending value: '%s' to output entity: %s",self._value,output_entity
+        #         )
+
+        # # Trigger output scripts
+        # if (
+        #     x := self._config.get("output_script")
+        # ) is not None and self._value is not None:
+        #     registry = er.async_get(self.hass)
+        #     # Validate + resolve entity registry id to entity_id
+        #     for entity in x["entity_id"]:
+        #         # try:
+        #         output_entity = er.async_validate_entity_id(registry, entity)
+        #         self.hass.
+        #         self.hass.states.async_set(
+        #             entity_id=output_entity, new_state=self._value
+        #         )
+
+        #         # except:
+        #         _LOGGER.debug(
+        #             "Sending value: '%s' to output entity: %s",self._value,output_entity
+        #         )
 
         # self._attr_is_on = new_state
         # self._control_state=new_state
@@ -654,6 +697,7 @@ class PrioritySwitch(SensorEntity):
                     "Change detected outside grace period, likely manual. Pausing operations."
                 )
                 self._is_paused = True
+                self.recalculate_value()
 
         if (x := self._config.get("output_entity")) is not None:
             registry = er.async_get(self.hass)
@@ -700,6 +744,7 @@ class PrioritySwitch(SensorEntity):
         ):
             #####
             self._is_paused = False
+            self._prev_value = None
 
         #####
         if (
@@ -708,7 +753,7 @@ class PrioritySwitch(SensorEntity):
             or self._is_paused
         ):
             return
-
+        self._last_command_time = datetime.now()
         self._prev_value = self.state
         if self._config.get("output_script") is not None:
             await self.hass.services.async_call(
@@ -781,7 +826,21 @@ class PrioritySwitch(SensorEntity):
             "active_input": self._highest_active_priority
             if self._highest_active_priority is not None
             else "None",
+            "active_input_friendly": (
+                self._inputs[self._highest_active_priority].name
+                if self._highest_active_priority is not None
+                and self._highest_active_priority >= 0
+                else "None"
+                if self._highest_active_priority is None
+                else "Paused"
+            ),
+            "paused": self._is_paused,
         }
+        if self._config.get("output_entity"):
+            states.update({"output_entity": self._config.get("output_entity")})
+        elif self._config.get("output_script"):
+            states.update({"output_script": self._config.get("output_script")})
+
         inputs = {}
         for item in self._inputs.values():
             x = item.name

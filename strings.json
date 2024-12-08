@@ -49,6 +49,7 @@
           "detect_manual": "Detect Manual",
           "automation_pause": "Automation Pause",
           "initial_run": "Initial Run",
+          "only_send_on_change": "Only trigger if value changed",
           "output_script": "Script to run when output is changed. Will receive fields 'value' and 'sensor' with data.",
           "output_entity": "The entity that should be triggered. (Supports Switch,Light Brightness and Cover)"
         },
@@ -187,6 +188,7 @@
           "detect_manual": "Detect Manual",
           "automation_pause": "Automation Pause",
           "initial_run": "Initial Run",
+          "only_send_on_change": "Only trigger if value changed",
           "output_script": "Script to run when output is changed. Will receive fields 'value' and 'sensor' with data.",
           "output_entity": "The entity that should be triggered. (Supports Switch,Light Brightness and Cover)"
         },

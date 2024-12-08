@@ -1,7 +1,9 @@
 """The Priority Switch integration."""
+
 from __future__ import annotations
 import logging
-from homeassistant.config_entries import ConfigEntry, device_registry as dr
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.helpers import device_registry as dr
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 
