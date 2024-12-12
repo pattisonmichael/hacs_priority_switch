@@ -489,7 +489,7 @@ class PrioritySwitchCommonFlow(ABC, FlowHandler):
         return self.async_show_form(
             step_id="add_input_entity",
             last_step=False,
-            data_schema=self.add_suggested_values_to_schema(INPUT_SCHEMA, user_input),
+            data_schema=self.add_suggested_values_to_schema(INPUT_SCHEMA, user_input),  # noqa: possibly-used-before-assignment
             description_placeholders={
                 "input_name": self.cur_data.inputs[str(self.temp_input_priority)][
                     "name"

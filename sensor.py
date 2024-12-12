@@ -9,7 +9,7 @@ from typing import Any
 
 from voluptuous import error as vol_err
 
-from homeassistant.components.sensor import SensorEntity
+from homeassistant.components.sensor import SensorEntity, RestoreSensor
 
 # from homeassistant.components.switch import SwitchEntity
 from homeassistant.components.template.template_entity import _TemplateAttribute
@@ -256,6 +256,7 @@ class InputClass(Entity):
                 return
 
             self.control_state = new_state.state
+            _LOGGER.debug("Received value callback: %s ,%s", self.name, new_state.state)
             self.priority_switch.recalculate_value()
 
         if (ctype := self.control_type) in [ControlType.TRUE, ControlType.FALSE]:
@@ -271,9 +272,9 @@ class InputClass(Entity):
                 self.hass, self.control_sensor_source_id, process_entity_state
             )
             try:
-                self.control_state = self.hass.states.get(
-                    self.control_sensor_source_id
-                ).state
+                entity = self.hass.states.get(self.control_sensor_source_id)
+                if entity is not None:
+                    self.control_state = entity.state
             finally:
                 pass
             # )
@@ -323,6 +324,9 @@ class InputClass(Entity):
                 return
 
             self.control_state = new_state.state
+            _LOGGER.debug(
+                "Received control callback: %s ,%s", self.name, new_state.state
+            )
             self.priority_switch.recalculate_value()
 
         @callback
@@ -475,7 +479,7 @@ class InputClass(Entity):
             self.cleanup_value_callbacks.pop()()
 
 
-class PrioritySwitch(SensorEntity):
+class PrioritySwitch(RestoreSensor, SensorEntity):
     """Main PrioritySwitch class."""
 
     _highest_active_priority = None
@@ -526,6 +530,19 @@ class PrioritySwitch(SensorEntity):
         # self._sensor = sensor  # Reference to the PrioritySensor instance
         # self._attr_device_info = device.dict_repr
         self.register_output_callback()
+
+    async def async_added_to_hass(self) -> None:
+        """Handle entity which will be added."""
+        await super().async_added_to_hass()
+        restored_data = await self.async_get_last_sensor_data()
+        if restored_data:
+            self._attr_native_unit_of_measurement = (
+                restored_data.native_unit_of_measurement
+            )
+            try:
+                self._attr_native_value = restored_data.native_value
+            except SyntaxError as err:
+                _LOGGER.warning("Could not restore last state: %s", err)
 
     @property
     def name(self):  # noqa: D102
@@ -660,6 +677,7 @@ class PrioritySwitch(SensorEntity):
         if self.entity_id is None:
             _LOGGER.debug("No Entity ID set in recalculate_value")
         else:
+            _LOGGER.debug("Updated value: %s", self._value)
             self.schedule_update_ha_state()
 
     async def async_will_remove_from_hass(self) -> None:
@@ -790,7 +808,7 @@ class PrioritySwitch(SensorEntity):
                     _LOGGER.debug("Switch/Input_Boolean entity: %s", entity)
                     try:
                         state = float(self.state)
-                    except ValueError:
+                    except (ValueError, TypeError):
                         state = self.state
                     try:
                         service = "turn_on" if cv.boolean(state) else "turn_off"
@@ -817,6 +835,7 @@ class PrioritySwitch(SensorEntity):
                         blocking=False,
                         context=self._context,
                     )
+        _LOGGER.debug("Updated entity: %s", self.state)
 
     @property
     def extra_state_attributes(self) -> Mapping[str, Any] | None:
@@ -880,7 +899,7 @@ class PrioritySwitch(SensorEntity):
         return states
 
 
-class PrioritySensor(SensorEntity):
+class PrioritySensor(RestoreSensor, SensorEntity):
     """Main PrioritySensor Class."""
 
     def __init__(self, name, friendly_name):
@@ -890,6 +909,19 @@ class PrioritySensor(SensorEntity):
         self._state = None
         # self._attr_device_info = device.dict_repr
         self._value = None
+
+    async def async_added_to_hass(self) -> None:
+        """Handle entity which will be added."""
+        await super().async_added_to_hass()
+        restored_data = await self.async_get_last_sensor_data()
+        if restored_data:
+            self._attr_native_unit_of_measurement = (
+                restored_data.native_unit_of_measurement
+            )
+            try:
+                self._attr_native_value = restored_data.native_value
+            except SyntaxError as err:
+                _LOGGER.warning("Could not restore last state: %s", err)
 
     @property
     def name(self):
