@@ -327,7 +327,9 @@ class InputClass(Entity):
             _LOGGER.debug(
                 "Received control callback: %s ,%s", self.name, new_state.state
             )
-            self.priority_switch.recalculate_value()
+            self.priority_switch.recalculate_value(
+                caller="process_entity_state", trigger=self.name
+            )
 
         @callback
         async def update_sun_callback(now: datetime) -> None:  # pylint: disable=unused-argument
@@ -568,7 +570,7 @@ class PrioritySwitch(RestoreSensor, SensorEntity):
             # input_data.update({"hass": self.hass})
             input_obj = InputClass(self, hass=self.hass, **input_data)
             self._inputs[input_obj.priority] = input_obj
-            self.recalculate_value()
+            self.recalculate_value(caller="add_input")
         else:
             raise ValueError("Cannot add more than 20 inputs")
 
@@ -578,7 +580,7 @@ class PrioritySwitch(RestoreSensor, SensorEntity):
             input_obj = self._inputs[input_name]
             input_obj.remove_callbacks()
             del self._inputs[input_name]
-            self.recalculate_value()
+            self.recalculate_value(caller="remove_input")
 
     def _get_highest_active_input(self) -> int | None:
         """Find the highest priority input which is active."""
@@ -601,7 +603,7 @@ class PrioritySwitch(RestoreSensor, SensorEntity):
             else None
         )
 
-    def recalculate_value(self):
+    def recalculate_value(self, caller=None, trigger=None):
         """Recalculate current state and value of the sensor."""
         # Implement the logic to recalculate the state of the switch
         # After recalculating, update the state of the switch
@@ -619,65 +621,16 @@ class PrioritySwitch(RestoreSensor, SensorEntity):
             #     self._inputs[self._highest_active_priority].control_state
             # )
             self._value = self._inputs[self._highest_active_priority].value
-        #
 
-        # only send update if value is different when configured
-        # if self._only_send_on_change and previousValue==self._value:
-        #    return
-
-        # Trigger output Entities
-        # if (
-        #     x := self._config.get("output_entity")
-        # ) is not None and self._value is not None:
-        #     registry = er.async_get(self.hass)
-        #     # Validate + resolve entity registry id to entity_id
-        #     for entity in x["entity_id"]:
-        #         # try:
-        #         output_entity = er.async_validate_entity_id(registry, entity)
-        #         self.hass.states.async_set(
-        #             entity_id=output_entity, new_state=self._value
-        #         )
-
-        #         # except:
-        #         _LOGGER.debug(
-        #             "Sending value: '%s' to output entity: %s",self._value,output_entity
-        #         )
-
-        # # Trigger output scripts
-        # if (
-        #     x := self._config.get("output_script")
-        # ) is not None and self._value is not None:
-        #     registry = er.async_get(self.hass)
-        #     # Validate + resolve entity registry id to entity_id
-        #     for entity in x["entity_id"]:
-        #         # try:
-        #         output_entity = er.async_validate_entity_id(registry, entity)
-        #         self.hass.
-        #         self.hass.states.async_set(
-        #             entity_id=output_entity, new_state=self._value
-        #         )
-
-        #         # except:
-        #         _LOGGER.debug(
-        #             "Sending value: '%s' to output entity: %s",self._value,output_entity
-        #         )
-
-        # self._attr_is_on = new_state
-        # self._control_state=new_state
-        # self._state = new_state
-        # Update the sensor state based on the switch state or other criteria
-        # if (
-        #     self._state != new_state
-        #     and self._highest_active_priority is not None
-        # ):
-        #     self._control_state = new_state
-        #     self._sensor.set_state(self._inputs[self._highest_active_priority].value)
-        #     if self.init_complete:
-        #         self.schedule_update_ha_state()
         if self.entity_id is None:
             _LOGGER.debug("No Entity ID set in recalculate_value")
         else:
-            _LOGGER.debug("Updated value: %s", self._value)
+            _LOGGER.debug(
+                "Updated value: %s, Called by: %s, Trigger: %s",
+                self._value,
+                caller,
+                trigger,
+            )
             self.schedule_update_ha_state()
 
     async def async_will_remove_from_hass(self) -> None:
@@ -715,7 +668,7 @@ class PrioritySwitch(RestoreSensor, SensorEntity):
                     "Change detected outside grace period, likely manual. Pausing operations."
                 )
                 self._is_paused = True
-                self.recalculate_value()
+                self.recalculate_value(caller="handle_output_entity_state_change")
 
         if (x := self._config.get("output_entity")) is not None:
             registry = er.async_get(self.hass)
@@ -754,7 +707,7 @@ class PrioritySwitch(RestoreSensor, SensorEntity):
 
     async def async_update(self):
         """Update the switch state."""
-        self.recalculate_value()
+        self.recalculate_value(caller="async_update")
         now = datetime.now()
         if self._is_paused and (
             (now - (self._last_command_time or datetime.min))
@@ -962,26 +915,6 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     """Create an instance of the PrioritySwitch."""
 
     _LOGGER.debug("Switch async_setup_entry")
-    # device_registry = dr.async_get(hass)
-
-    # device = device_registry.async_get_or_create(
-    #     config_entry_id=config_entry.entry_id,
-    #     connections={},
-    #     identifiers={(DOMAIN, config_entry.data["switch_name"])},
-    #     manufacturer=DOMAIN_FRIENDLY,
-    #     # suggested_area="Kitchen",
-    #     name=config_entry.data.get("switch_name_friendly"),
-    #     # model=entry.data.get('switch_name_friendly'),
-    #     # sw_version="config.swversion",
-    #     # hw_version="config.hwversion",
-    # )
-
-    # Create an instance of the PrioritySensor
-    # priority_sensor = PrioritySensor(
-    #     name=config_entry.data["switch_name"] + "_out",
-    #     friendly_name=config_entry.data["switch_name_friendly"] + " out",
-    #     device=device,
-    # )
 
     # Create an instance of the PrioritySwitch and pass the sensor to it
     priority_switch = PrioritySwitch(
@@ -1011,19 +944,6 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
         input_data["value_type"] = getattr(InputType, input_data["value_type"].upper())
         priority_switch.add_input(input_data)
 
-    # async_add_entities(
-    #     [
-    #         PrioritySwitch(
-    #             device,
-    #             hass=hass,
-    #             name=f"{DOMAIN_FRIENDLY} {device.name}",
-    #             data=entry,
-    #             async_add_entities=async_add_entities,
-    #         )
-    #     ]
-    # )
-    # for inp in self._inputs:
-    #     print(inp)
     _LOGGER.debug("Finished adding priority switch:\n%s", config_entry.data)
     # Return True if setup was successful
     return True
