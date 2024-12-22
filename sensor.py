@@ -9,7 +9,7 @@ from typing import Any
 
 from voluptuous import error as vol_err
 
-from homeassistant.components.sensor import SensorEntity, RestoreSensor
+from homeassistant.components.sensor import RestoreSensor, SensorEntity
 
 # from homeassistant.components.switch import SwitchEntity
 from homeassistant.components.template.template_entity import _TemplateAttribute
@@ -295,16 +295,19 @@ class InputClass(Entity):
                 self._template_result_info = result_info
                 result_info.async_refresh()
 
-                # TODO also check shadow position and act acoringly
-                # self.async_on_remove(
-                # self.value_unregister_callback = async_track_state_change_event(
-                #     self.hass, self.value_sensor_source_id, process_entity_state
-                # )
-                # try:
-                #     self.value = self.hass.states.get(self.value_sensor_source_id).state
-                #     self.sun
-                # finally:
-                #     pass
+        self.priority_switch.recalculate_value(
+            caller="process_entity_state", trigger=self.name
+        )
+        # TODO also check shadow position and act acoringly
+        # self.async_on_remove(
+        # self.value_unregister_callback = async_track_state_change_event(
+        #     self.hass, self.value_sensor_source_id, process_entity_state
+        # )
+        # try:
+        #     self.value = self.hass.states.get(self.value_sensor_source_id).state
+        #     self.sun
+        # finally:
+        #     pass
 
     def register_value_callbacks(self):
         """Register callback functions for entity and template updates.
@@ -486,7 +489,7 @@ class PrioritySwitch(RestoreSensor, SensorEntity):
 
     _highest_active_priority = None
     _control_state = None
-    _unrecorded_attributes: frozenset({"active_input", "inputs"})  # type: ignore[reportInvalidTypeForm ]
+    _unrecorded_attributes: frozenset({"active_input", "inputs"})  # type: ignore[reportInvalidTypeForm ] pylint: disable=C0301
     _attr_has_entity_name = True
     _prev_value = None
     _last_command_time = None
@@ -612,15 +615,18 @@ class PrioritySwitch(RestoreSensor, SensorEntity):
 
         # self.set_state(new_state)
         # previousValue = self._value
-        self._highest_active_priority = self._get_highest_active_input()
-        if self._highest_active_priority is None:
-            # new_state = False
-            self._value = None
+        if self._is_paused:
+            _LOGGER.debug("Paused, not recalculating.")
         else:
-            # new_state = cv.boolean(
-            #     self._inputs[self._highest_active_priority].control_state
-            # )
-            self._value = self._inputs[self._highest_active_priority].value
+            self._highest_active_priority = self._get_highest_active_input()
+            if self._highest_active_priority is None:
+                # new_state = False
+                self._value = None
+            else:
+                # new_state = cv.boolean(
+                #     self._inputs[self._highest_active_priority].control_state
+                # )
+                self._value = self._inputs[self._highest_active_priority].value
 
         if self.entity_id is None:
             _LOGGER.debug("No Entity ID set in recalculate_value")
@@ -631,7 +637,7 @@ class PrioritySwitch(RestoreSensor, SensorEntity):
                 caller,
                 trigger,
             )
-            self.schedule_update_ha_state()
+        self.schedule_update_ha_state()
 
     async def async_will_remove_from_hass(self) -> None:
         """Automatically called by Home Assistant when this entity is about to be removed."""
@@ -644,7 +650,7 @@ class PrioritySwitch(RestoreSensor, SensorEntity):
 
         @callback
         async def handle_output_entity_state_change(
-            event: Event[EventStateChangedData],
+            event: Event[EventStateChangedData],  # pylint: disable=unused-argument
         ) -> None:
             # Check if the state change is for the entity we're interested in
             # if event.data["entity_id"] != self._config.get(output_entity):
@@ -887,7 +893,7 @@ class PrioritySensor(RestoreSensor, SensorEntity):
         return self._friendly_name
 
     @property
-    def state(self):
+    def state(self):  # pylint: disable=overridden-final-method
         """Entity State."""
         return self._state
 
