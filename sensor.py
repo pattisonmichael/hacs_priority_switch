@@ -674,7 +674,8 @@ class PrioritySwitch(RestoreSensor, SensorEntity):
                     "Change detected outside grace period, likely manual. Pausing operations."
                 )
                 self._is_paused = True
-                self.recalculate_value(caller="handle_output_entity_state_change")
+                # self.recalculate_value(caller="handle_output_entity_state_change")
+                self.async_update()  # Finally fixed ?
 
         if (x := self._config.get("output_entity")) is not None:
             registry = er.async_get(self.hass)
