@@ -2,7 +2,7 @@
   "domain": "priorityswitch",
   "name": "Priority Switch",
   "codeowners": ["@pattisonmichael"],
-  "version": "0.9.5b3",
+  "version": "0.9.5b4",
   "config_flow": true,
   "dependencies": [],
   "documentation": "https://www.home-assistant.io/integrations/priorityswitch",

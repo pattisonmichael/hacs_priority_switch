@@ -637,6 +637,9 @@ class PrioritySwitch(RestoreSensor, SensorEntity):
                 caller,
                 trigger,
             )
+            if caller == None:
+                self.schedule_update_ha_state(force_refresh=True)
+                return
         self.schedule_update_ha_state()
 
     async def async_will_remove_from_hass(self) -> None:
@@ -723,6 +726,9 @@ class PrioritySwitch(RestoreSensor, SensorEntity):
             #####
             self._is_paused = False
             self._prev_value = None
+            _LOGGER.debug(
+                "Not Paused anymore: %s, isPaused: %s", self._name, self._is_paused
+            )
 
         #####
         if (
@@ -730,6 +736,12 @@ class PrioritySwitch(RestoreSensor, SensorEntity):
             and self._only_send_on_change
             or self._is_paused
         ):
+            _LOGGER.debug(
+                "Same value or or paused, not sending for: %s, Value: %s, Previous Value: %s",
+                self._name,
+                self.state,
+                self._prev_value,
+            )
             return
         self._last_command_time = datetime.now()
         self._prev_value = self.state
@@ -784,7 +796,7 @@ class PrioritySwitch(RestoreSensor, SensorEntity):
                         context=self._context,
                     )
                 elif entity.domain == "cover":
-                    _LOGGER.debug("Cover entity: %s", entity)
+                    _LOGGER.debug("Cover entity: %s, set to: %s", entity, self.state)
                     await self.hass.services.async_call(
                         domain="cover",
                         service="set_cover_position",
