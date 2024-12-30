@@ -291,7 +291,8 @@
                 "Entity": "Value Entity",
                 "Fixed": "Fixed Value",
                 "Sun": "Follow Sun",
-                "Template": "Value Template"
+                "Template": "Value Template",
+                "manual": "Detect Manual interaction"
             }
         },
         "clonemenu": {
