@@ -1,5 +1,6 @@
 core.code-workspace
 sample.yaml
+script/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

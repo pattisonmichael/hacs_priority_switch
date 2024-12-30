@@ -288,7 +288,8 @@
         "Fixed": "Fixed Value",
         "Entity": "Value Entity",
         "Template": "Value Template",
-        "Sun": "Follow Sun"
+        "Sun": "Follow Sun",
+        "manual": "Detect Manual interaction"
       }
     },
     "add_input_control": {

@@ -10,6 +10,7 @@ from typing import Any
 from voluptuous import error as vol_err
 
 from homeassistant.components.sensor import RestoreSensor, SensorEntity
+from homeassistant.core import Context
 
 # from homeassistant.components.switch import SwitchEntity
 from homeassistant.components.template.template_entity import _TemplateAttribute
@@ -256,6 +257,7 @@ class InputClass(Entity):
                 return
 
             self.control_state = new_state.state
+            _LOGGER.debug("Should this be Control callback?:")
             _LOGGER.debug("Received value callback: %s ,%s", self.name, new_state.state)
             self.priority_switch.recalculate_value()
 
@@ -295,9 +297,9 @@ class InputClass(Entity):
                 self._template_result_info = result_info
                 result_info.async_refresh()
 
-        self.priority_switch.recalculate_value(
-            caller="process_entity_state", trigger=self.name
-        )
+        # self.priority_switch.recalculate_value(
+        #     caller="process_entity_state", trigger=self.name
+        # )
         # TODO also check shadow position and act acoringly
         # self.async_on_remove(
         # self.value_unregister_callback = async_track_state_change_event(
@@ -326,9 +328,16 @@ class InputClass(Entity):
             ):
                 return
 
-            self.control_state = new_state.state
+            # self.control_state = new_state.state
+            self.value = new_state.state
+            _LOGGER.debug("Should this be Value Callback?:")
             _LOGGER.debug(
                 "Received control callback: %s ,%s", self.name, new_state.state
+            )
+            _LOGGER.debug(
+                "Context user: %s origin: %s",
+                event.context.user_id,
+                event.context.origin_event,
             )
             self.priority_switch.recalculate_value(
                 caller="process_entity_state", trigger=self.name
@@ -637,10 +646,10 @@ class PrioritySwitch(RestoreSensor, SensorEntity):
                 caller,
                 trigger,
             )
-            if caller == None:
-                self.schedule_update_ha_state(force_refresh=True)
+            if caller == "async_update":
+                self.schedule_update_ha_state()
                 return
-        self.schedule_update_ha_state()
+        self.schedule_update_ha_state(force_refresh=True)
 
     async def async_will_remove_from_hass(self) -> None:
         """Automatically called by Home Assistant when this entity is about to be removed."""
@@ -663,14 +672,19 @@ class PrioritySwitch(RestoreSensor, SensorEntity):
             if self._is_paused:
                 return
 
-            now = datetime.now()
+            # now = datetime.now()
 
             # Check if we're within the grace period of an automated command
-            if self._last_command_time and now - self._last_command_time <= timedelta(
-                **self._deadtime
-            ):
+            if event.context.parent_id == "priorityswitch":
+                # if self._last_command_time and now - self._last_command_time <= timedelta(
+                #     **self._deadtime
+                # ):
                 # This change is considered part of the automated command; no action needed
-                _LOGGER.debug("Change within grace period, considered as automated.")
+                _LOGGER.debug(
+                    "Change within grace period, considered as automated. Last Command Time: %s and dead time: %s",
+                    self._last_command_time,
+                    self._deadtime,
+                )
             else:
                 # Detected a change outside the grace period, likely manual
                 _LOGGER.debug(
@@ -678,7 +692,7 @@ class PrioritySwitch(RestoreSensor, SensorEntity):
                 )
                 self._is_paused = True
                 # self.recalculate_value(caller="handle_output_entity_state_change")
-                self.async_update()  # Finally fixed ?
+                # await self.async_update()  # Finally fixed ?
 
         if (x := self._config.get("output_entity")) is not None:
             registry = er.async_get(self.hass)
@@ -745,6 +759,8 @@ class PrioritySwitch(RestoreSensor, SensorEntity):
             return
         self._last_command_time = datetime.now()
         self._prev_value = self.state
+        context = Context()
+        context.parent_id = "priorityswitch"
         if self._config.get("output_script") is not None:
             await self.hass.services.async_call(
                 domain="script",
@@ -757,7 +773,7 @@ class PrioritySwitch(RestoreSensor, SensorEntity):
                 },
                 target=self._config["output_script"],
                 blocking=False,
-                context=self._context,
+                context=context,
             )
         if (x := self._config.get("output_entity")) is not None:
             for entity_id in x["entity_id"]:
@@ -774,7 +790,7 @@ class PrioritySwitch(RestoreSensor, SensorEntity):
                         },
                         target=x,
                         blocking=False,
-                        context=self._context,
+                        context=context,
                     )
                 elif entity.domain in ["switch", "input_boolean"]:
                     _LOGGER.debug("Switch/Input_Boolean entity: %s", entity)
@@ -793,7 +809,7 @@ class PrioritySwitch(RestoreSensor, SensorEntity):
                         service=service,
                         target=x,
                         blocking=False,
-                        context=self._context,
+                        context=context,
                     )
                 elif entity.domain == "cover":
                     _LOGGER.debug("Cover entity: %s, set to: %s", entity, self.state)
@@ -805,7 +821,22 @@ class PrioritySwitch(RestoreSensor, SensorEntity):
                         },
                         target=x,
                         blocking=False,
-                        context=self._context,
+                        context=context,
+                    )
+                elif entity.domain == "input_number":
+                    _LOGGER.debug(
+                        "Input_Number entity: %s, set to: %s", entity, self.state
+                    )
+
+                    await self.hass.services.async_call(
+                        domain="input_number",
+                        service="set_value",
+                        service_data={
+                            "value": float(self.state) if self.state is not None else 0,
+                        },
+                        target=x,
+                        blocking=True,
+                        context=context,
                     )
         _LOGGER.debug("Updated entity: %s", self.state)
 

@@ -21,6 +21,7 @@ class InputType(StrEnum):
     SUN = "Sun"
     ENTITY = "Entity"
     TEMPLATE = "Template"
+    MANUAL = "Manual Control"
 
 
 @dataclass

@@ -1,4 +1,5 @@
 """Config & OptionsFlow Schema."""
+
 import voluptuous as vol
 
 from homeassistant.helpers import selector
@@ -10,6 +11,7 @@ VALUETYPE = [
     selector.SelectOptionDict(value=str(InputType.ENTITY), label="entity"),
     selector.SelectOptionDict(value=str(InputType.TEMPLATE), label="template"),
     selector.SelectOptionDict(value=str(InputType.SUN), label="sun"),
+    selector.SelectOptionDict(value=str(InputType.MANUAL), label="manual"),
 ]
 CONTROLTYPE = [
     selector.SelectOptionDict(value=str(ControlType.TRUE), label="True"),
@@ -78,7 +80,7 @@ INPUT_SCHEMA_START = {  # pylint: disable=invalid-name
 }
 
 INPUT_SCHEMA_END = {  # pylint: disable=invalid-name
-    vol.Required(
+    vol.Optional(
         "value_type",
         # default=i.get("value_type")
     ): vol.Any(
@@ -130,7 +132,7 @@ ADVANCED_CONFIG_SCHEMA = vol.Schema(  # pylint: disable=invalid-name
         ): selector.TargetSelector(
             config=selector.TargetSelectorConfig(
                 entity=selector.EntityFilterSelectorConfig(
-                    domain=["switch", "input_boolean", "light", "cover"]
+                    domain=["switch", "input_boolean", "input_number", "light", "cover"]
                 )
             )
         ),
