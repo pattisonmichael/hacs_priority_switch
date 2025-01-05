@@ -5,10 +5,8 @@
   "version": "0.9.6",
   "config_flow": true,
   "dependencies": [],
-  "documentation": "https://www.home-assistant.io/integrations/priorityswitch",
-  "homekit": {},
+  "documentation": "https://github.com/pattisonmichael/hacs_priority_switch",
   "iot_class": "calculated",
-  "requirements": [],
-  "ssdp": [],
-  "zeroconf": []
+  "integration_type": "device",
+  "requirements": []
 }
