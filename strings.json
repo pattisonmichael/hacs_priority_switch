@@ -93,6 +93,13 @@
           "value_template": "The value template that should be used to get the value from to send."
         }
       },
+      "add_input_manual": {
+        "title": "Input {input_name} Step 2/2",
+        "description": "Here you can define the triggers that should indicate a manual interaction and cause the switch to pause.",
+        "data": {
+          "manual_trigger": "The triggers that should be used to pause the switch."
+        }
+      },
       "add_input_sun": {
         "title": "Input {input_name} Step 2/2",
         "description": "Here you can define the settings for an input that is tracking the sun.",
@@ -232,6 +239,13 @@
           "value_template": "The value template that should be used to get the value from to send."
         }
       },
+      "add_input_manual": {
+        "title": "Input {input_name} Step 2/2",
+        "description": "Here you can define the triggers that should indicate a manual interaction and cause the switch to pause.",
+        "data": {
+          "manual_trigger": "The triggers that should be used to pause the switch."
+        }
+      },
       "add_input_sun": {
         "title": "Input {input_name} Step 2/2",
         "description": "Here you can define the settings for an input that is tracking the sun.",
@@ -289,7 +303,7 @@
         "Entity": "Value Entity",
         "Template": "Value Template",
         "Sun": "Follow Sun",
-        "manual": "Detect Manual interaction"
+        "Manual": "Detect Manual interaction"
       }
     },
     "add_input_control": {
@@ -297,7 +311,8 @@
         "True": "True",
         "False": "False",
         "Entity": "Control Entity",
-        "Template": "Control Template (must evaluate to on/True/off/False"
+        "Template": "Control Template (must evaluate to on/True/off/False",
+        "Manual": "Detect Manual interaction"
       }
     },
     "mainmenu": {

@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Any, Dict, Optional  # noqa: UP035
+from typing import Any, Dict  # noqa: UP035
 
 
 class ControlType(StrEnum):
@@ -12,6 +12,7 @@ class ControlType(StrEnum):
     FALSE = "False"
     ENTITY = "Entity"
     TEMPLATE = "Template"
+    MANUAL = "Manual"
 
 
 class InputType(StrEnum):
@@ -21,7 +22,7 @@ class InputType(StrEnum):
     SUN = "Sun"
     ENTITY = "Entity"
     TEMPLATE = "Template"
-    MANUAL = "Manual Control"
+    MANUAL = "Manual"
 
 
 @dataclass
@@ -32,29 +33,30 @@ class InputData:
     priority: int
     control_type: ControlType
     value_type: InputType
-    control_template: Optional[str] = None
-    control_entity: Optional[str] = None
-    auto_on: Optional[str] = None
-    auto_off: Optional[str] = None
-    value: Optional[str] = None
-    value_entity: Optional[str] = None
-    value_template: Optional[str] = None
-    azimut: Optional[int] = None
-    elevation: Optional[int] = None
-    building_deviation: Optional[int] = 0
-    offset_entry: Optional[int] = 0
-    offset_exit: Optional[int] = 0
-    update_interval: Optional[int] = 10
-    sun_entity: Optional[str] = None
-    set_if_in_shadow: Optional[bool] = False
-    shadow: Optional[int] = None
-    elevation_lt10: Optional[int] = 0
-    elevation_10to20: Optional[int] = 0
-    elevation_20to30: Optional[int] = 50
-    elevation_30to40: Optional[int] = 50
-    elevation_40to50: Optional[int] = 50
-    elevation_50to60: Optional[int] = 80
-    elevation_gt60: Optional[int] = 100
+    control_template: str | None = None
+    control_entity: str | None = None
+    auto_on: str | None = None
+    auto_off: str | None = None
+    value: str | None = None
+    value_entity: str | None = None
+    value_template: str | None = None
+    azimut: int | None = None
+    elevation: int | None = None
+    building_deviation: int | None = 0
+    offset_entry: int | None = 0
+    offset_exit: int | None = 0
+    update_interval: int | None = 10
+    sun_entity: str | None = None
+    set_if_in_shadow: bool | None = False
+    shadow: int | None = None
+    elevation_lt10: int | None = 0
+    elevation_10to20: int | None = 0
+    elevation_20to30: int | None = 50
+    elevation_30to40: int | None = 50
+    elevation_40to50: int | None = 50
+    elevation_50to60: int | None = 80
+    elevation_gt60: int | None = 100
+    manual_trigger: str | None = None
 
 
 @dataclass
@@ -64,12 +66,12 @@ class PrioritySwitchData:
     inputs: Dict[str, InputData] = field(
         default_factory=lambda: dict()
     )  # dict[str, InputData] = field(default_factory=dict)
-    switch_name_friendly: Optional[str] = None
-    switch_name: Optional[str] = None
-    deadtime: Optional[str] = None
-    detect_manual: Optional[bool] = True
-    automation_pause: Optional[str] = None
-    initial_run: Optional[bool] = True
-    output_script: Optional[Any] = None
-    output_entity: Optional[str] = None
-    only_send_on_change: Optional[bool] = True
+    switch_name_friendly: str | None = None
+    switch_name: str | None = None
+    deadtime: str | None = None
+    detect_manual: bool | None = True
+    automation_pause: str | None = None
+    initial_run: bool | None = True
+    output_script: Any | None = None
+    output_entity: str | None = None
+    only_send_on_change: bool | None = True

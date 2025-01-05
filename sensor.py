@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable, Mapping
 from datetime import datetime, timedelta
 import logging
@@ -10,7 +11,6 @@ from typing import Any
 from voluptuous import error as vol_err
 
 from homeassistant.components.sensor import RestoreSensor, SensorEntity
-from homeassistant.core import Context
 
 # from homeassistant.components.switch import SwitchEntity
 from homeassistant.components.template.template_entity import _TemplateAttribute
@@ -18,6 +18,7 @@ from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 
 # from homeassistant.core import HomeAssistant
 from homeassistant.core import (
+    Context,
     Event,
     EventStateChangedData,
     # CALLBACK_TYPE,
@@ -45,6 +46,7 @@ from homeassistant.helpers.event import (
     async_track_time_interval,
 )
 from homeassistant.helpers.template import Template  # , result_as_boolean
+from homeassistant.helpers.trigger import async_initialize_triggers
 
 # from homeassistant.helpers.typing import EventType  # ConfigType, DiscoveryInfoType,
 from .const import (
@@ -102,6 +104,7 @@ class InputClass(Entity):
         elevation_40to50=None,
         elevation_50to60=None,
         elevation_gt60=None,
+        manual_trigger=None,
     ):
         """Init Class for Input."""
         self.priority_switch = (
@@ -150,6 +153,8 @@ class InputClass(Entity):
         self.elevation_50to60 = elevation_50to60
         self.elevation_gt60 = elevation_gt60
         self.cleanup_value_callbacks: list[Callable[[], None]] = []
+        self.manual_trigger = manual_trigger
+        self.manual_unregister_callback = None
         self.register_control_callbacks()
 
     #################
@@ -234,7 +239,10 @@ class InputClass(Entity):
     def control_state(self, value):
         # Setter method
         if cv.boolean(value):
-            self.register_value_callbacks()
+            # self.register_value_callbacks()
+            asyncio.run_coroutine_threadsafe(
+                self.register_value_callbacks(), self.hass.loop
+            )
         else:
             self.remove_callbacks_value()
         self._control_state = value
@@ -311,7 +319,7 @@ class InputClass(Entity):
         # finally:
         #     pass
 
-    def register_value_callbacks(self):
+    async def register_value_callbacks(self):
         """Register callback functions for entity and template updates.
 
         This is where you would connect to Home Assistant's event system
@@ -379,6 +387,56 @@ class InputClass(Entity):
                 self.value_unregister_callback = result_info.async_remove
                 self._value_template_result_info = result_info
                 result_info.async_refresh()
+        elif itype == InputType.MANUAL:
+            if self.manual_trigger is not None:
+                ###
+                async def async_done(
+                    variables: dict[str, Any], context: Context | None = None
+                ) -> None:
+                    # self._async_set_remaining_time_var(timeout_handle)
+                    # self._variables["wait"]["completed"] = True
+                    # self._variables["wait"]["trigger"] = variables["trigger"]
+                    # _set_result_unless_done(done)
+                    _LOGGER.debug(
+                        "Manual Trigger reached. Context: %s Variables: %s",
+                        context,
+                        variables,
+                    )
+
+                def log_cb(level: int, msg: str, **kwargs: Any) -> None:
+                    _LOGGER.debug(msg)
+
+                remove_triggers = await async_initialize_triggers(
+                    self.hass,
+                    self.manual_trigger,
+                    async_done,
+                    DOMAIN,
+                    self.name,
+                    log_cb,
+                    # variables=variables,
+                )
+                if not remove_triggers:
+                    return
+
+                self.manual_unregister_callback = remove_triggers
+                _LOGGER.debug(
+                    "Setup Manual Trigger: %s",
+                    self.manual_trigger,
+                )
+                ####
+                # template_var_tups: list[TrackTemplate] = []
+                # template_var_tup = TrackTemplate(Template(self.value_template), None)
+                # template_var_tups.insert(0, template_var_tup)
+
+                # result_info = async_track_template_result(
+                #     self.hass,
+                #     template_var_tups,
+                #     self._value_handle_results,
+                #     has_super_template=False,
+                # )
+                # self.value_unregister_callback = result_info.async_remove
+                # self._value_template_result_info = result_info
+                # result_info.async_refresh()
         elif itype == InputType.SUN:
             if self.sun_entity is not None:
                 registry = er.async_get(self.hass)
@@ -483,6 +541,8 @@ class InputClass(Entity):
             self.control_unregister_callback()
         if self.value_unregister_callback is not None:
             self.value_unregister_callback()
+        if self.manual_unregister_callback is not None:
+            self.manual_unregister_callback()
 
     def remove_callbacks_value(self):
         """Deregister callback functions for entity and template updates.

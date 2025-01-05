@@ -27,7 +27,7 @@ from homeassistant.data_entry_flow import FlowHandler, FlowResult
 from homeassistant.exceptions import HomeAssistantError, TemplateError
 from homeassistant.helpers import config_validation as cv, selector, template as tp
 from homeassistant.helpers.translation import async_get_translations
-
+from homeassistant.helpers.trigger import async_validate_trigger_config
 from .const import DOMAIN
 from .data_types import (
     ControlType,
@@ -385,6 +385,8 @@ class PrioritySwitchCommonFlow(ABC, FlowHandler):
                             user_input,
                         )
                     self.temp_input_priority = user_input["priority"]
+                    if user_input["control_type"] == ControlType.MANUAL:
+                        return await self.async_step_add_input_manual(user_input)
                     if user_input["value_type"] == InputType.FIXED:
                         return await self.async_step_add_input_fixed(user_input)
                     if user_input["value_type"] == InputType.ENTITY:
@@ -525,6 +527,45 @@ class PrioritySwitchCommonFlow(ABC, FlowHandler):
                 ]
             },
             preview="template",
+        )
+
+    async def async_step_add_input_manual(self, user_input=None):
+        """Handle the input template configuration submenu."""
+        errors = {}
+        if user_input.get("manual_trigger", None) is not None:
+            # Process the device configuration input and go back to the menu
+            try:
+                res = await async_validate_trigger_config(
+                    self.hass, user_input.get("manual_trigger", None)
+                )
+            except vol.MultipleInvalid as e:
+                # print(e)
+                errors["base"] = f"Trigger validation error: {e.msg}"  # pylint: disable=no-member
+            if not errors and res:
+                self.cur_data.inputs[str(self.temp_input_priority)].update(user_input)
+                self.temp_input_priority = None
+                return await self.async_step_menu()
+        if self.temp_input_priority is not None and not errors:
+            user_input = self.cur_data.inputs[str(self.temp_input_priority)]
+            # if self.temp_input_priority is None:
+            # Define a schema for the "inputs" part of the configuration
+        INPUT_SCHEMA = vol.Schema(  # pylint: disable=invalid-name
+            {
+                vol.Required("manual_trigger"): selector.TriggerSelector(),
+            },
+            extra=vol.ALLOW_EXTRA,
+        )
+
+        return self.async_show_form(
+            step_id="add_input_manual",
+            last_step=False,
+            data_schema=self.add_suggested_values_to_schema(INPUT_SCHEMA, user_input),  # pylint: disable=possibly-used-before-assignment
+            description_placeholders={
+                "input_name": self.cur_data.inputs[str(self.temp_input_priority)][
+                    "name"
+                ]
+            },
+            errors=errors,
         )
 
     async def async_step_add_input_sun(self, user_input=None):

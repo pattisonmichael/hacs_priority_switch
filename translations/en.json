@@ -49,6 +49,13 @@
                 "description": "Here you can define the fixed value for an input.",
                 "title": "Input {input_name} Step 2/2"
             },
+            "add_input_manual": {
+                "data": {
+                    "manual_trigger": "The triggers that should be used to pause the switch."
+                },
+                "description": "Here you can define the triggers that should indicate a manual interaction and cause the switch to pause.",
+                "title": "Input {input_name} Step 2/2"
+            },
             "add_input_sun": {
                 "data": {
                     "auto_shade": "Enable this to activate cover control by sun. You need to fill in all below configuration to use this!",
@@ -188,6 +195,13 @@
                 "description": "Here you can define the fixed value for an input.",
                 "title": "Input {input_name} Step 2/2"
             },
+            "add_input_manual": {
+                "data": {
+                    "manual_trigger": "The triggers that should be used to pause the switch."
+                },
+                "description": "Here you can define the triggers that should indicate a manual interaction and cause the switch to pause.",
+                "title": "Input {input_name} Step 2/2"
+            },
             "add_input_sun": {
                 "data": {
                     "auto_shade": "Enable this to activate cover control by sun. You need to fill in all below configuration to use this!",
@@ -282,6 +296,7 @@
             "options": {
                 "Entity": "Control Entity",
                 "False": "False",
+                "Manual": "Detect Manual interaction",
                 "Template": "Control Template (must evaluate to on/True/off/False",
                 "True": "True"
             }
@@ -290,9 +305,9 @@
             "options": {
                 "Entity": "Value Entity",
                 "Fixed": "Fixed Value",
+                "Manual": "Detect Manual interaction",
                 "Sun": "Follow Sun",
-                "Template": "Value Template",
-                "manual": "Detect Manual interaction"
+                "Template": "Value Template"
             }
         },
         "clonemenu": {
