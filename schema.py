@@ -11,13 +11,14 @@ VALUETYPE = [
     selector.SelectOptionDict(value=str(InputType.ENTITY), label="entity"),
     selector.SelectOptionDict(value=str(InputType.TEMPLATE), label="template"),
     selector.SelectOptionDict(value=str(InputType.SUN), label="sun"),
-    selector.SelectOptionDict(value=str(InputType.MANUAL), label="manual"),
+    selector.SelectOptionDict(value=str(InputType.NONE), label="none"),
 ]
 CONTROLTYPE = [
     selector.SelectOptionDict(value=str(ControlType.TRUE), label="True"),
     selector.SelectOptionDict(value=str(ControlType.FALSE), label="False"),
     selector.SelectOptionDict(value=str(ControlType.ENTITY), label="entity"),
     selector.SelectOptionDict(value=str(ControlType.TEMPLATE), label="template"),
+    selector.SelectOptionDict(value=str(ControlType.MANUAL), label="manual"),
 ]
 
 SUN_ATTRIBUTES = [

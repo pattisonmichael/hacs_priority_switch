@@ -28,6 +28,7 @@ from homeassistant.exceptions import HomeAssistantError, TemplateError
 from homeassistant.helpers import config_validation as cv, selector, template as tp
 from homeassistant.helpers.translation import async_get_translations
 from homeassistant.helpers.trigger import async_validate_trigger_config
+
 from .const import DOMAIN
 from .data_types import (
     ControlType,
@@ -78,9 +79,6 @@ def insert_and_shift_up(d, new_key, new_value):
 #         return True
 
 
-# TODO: Add OutputTarget
-
-
 def string_to_boolean(s: str):
     """Convert Boolean to String to actual boolean or return None if not boolean."""
     if s.lower() == "true":
@@ -91,7 +89,10 @@ def string_to_boolean(s: str):
 
 
 def validate_input(
-    step: int, user_input: dict[str, Any], data: dict[str, Any], priority: int | None
+    step: int,
+    user_input: dict[str, Any],
+    data: dict[str, Any],  # pylint: disable=unused-argument
+    priority: int | None,  # pylint: disable=unused-argument
 ) -> dict[str, Any]:
     """Validate Input data for Step 1 & 2."""
     if user_input is None:
@@ -119,7 +120,10 @@ def validate_input(
             or not cv.template(user_input.get("control_template"))
         ):
             errors.update({"control_template": "control_template_req"})
-        if user_input.get("value_type") is None:
+        if (
+            user_input.get("value_type") is None
+            and user_input.get("control_type") != ControlType.MANUAL
+        ):
             errors.update({"value_type": "value_type_req"})
 
     else:
@@ -317,10 +321,10 @@ class PrioritySwitchCommonFlow(ABC, FlowHandler):
 
         MENU = []  # pylint: disable=invalid-name
         for val in self.hass.config_entries.async_entries(DOMAIN):
-            MENU.append(
+            MENU.append(  # noqa: PERF401
                 selector.SelectOptionDict(
                     value="clone_" + val.entry_id,
-                    label=f"{self.translations.get('component.priorityswitch.selector.clonemenu.options.clone')} {val.title}",
+                    label=f"{self.translations.get('component.priorityswitch.selector.clonemenu.options.clone')} {val.title}",  # pylint: disable=line-too-long
                 )
             )
         MENU.append(selector.SelectOptionDict(value="abort", label="aback"))
@@ -350,7 +354,7 @@ class PrioritySwitchCommonFlow(ABC, FlowHandler):
             if len(val.get("errors", {})) == 0:
                 if (
                     user_input.get("control_type")
-                    in [ControlType.TRUE, ControlType.FALSE]
+                    in [ControlType.TRUE, ControlType.FALSE, ControlType.MANUAL]
                     or (
                         user_input.get("control_type") == ControlType.ENTITY
                         and user_input.get("control_entity") is not None
@@ -395,7 +399,7 @@ class PrioritySwitchCommonFlow(ABC, FlowHandler):
                         return await self.async_step_add_input_template(user_input)
                     if user_input["value_type"] == InputType.SUN:
                         return await self.async_step_add_input_sun(user_input)
-                    user_input = await validate_input(
+                    user_input = validate_input(
                         self.hass, user_input, self.cur_data, None
                     )
                     self.temp_input_priority = None
@@ -546,9 +550,12 @@ class PrioritySwitchCommonFlow(ABC, FlowHandler):
                 self.temp_input_priority = None
                 return await self.async_step_menu()
         if self.temp_input_priority is not None and not errors:
-            user_input = self.cur_data.inputs[str(self.temp_input_priority)]
-            # if self.temp_input_priority is None:
-            # Define a schema for the "inputs" part of the configuration
+            user_input["manual_trigger"] = self.cur_data.inputs[
+                str(self.temp_input_priority)
+            ]["manual_trigger"]
+            self.cur_data.inputs[str(self.temp_input_priority)] = user_input
+        # if self.temp_input_priority is None:
+        # Define a schema for the "inputs" part of the configuration
         INPUT_SCHEMA = vol.Schema(  # pylint: disable=invalid-name
             {
                 vol.Required("manual_trigger"): selector.TriggerSelector(),
@@ -694,8 +701,7 @@ class PrioritySwitchConfigFlow(PrioritySwitchCommonFlow, ConfigFlow, domain=DOMA
                 category="selector",
                 config_flow=True,
             )
-        res = await self.async_step_menu()
-        return res
+        return await self.async_step_menu()
 
 
 class PrioritySwitchOptionsFlow(PrioritySwitchCommonFlow, OptionsFlowWithConfigEntry):
@@ -732,7 +738,7 @@ class PrioritySwitchOptionsFlow(PrioritySwitchCommonFlow, OptionsFlowWithConfigE
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Manage KNX options."""
+        """Initialize the options flow."""
 
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
@@ -746,8 +752,7 @@ class PrioritySwitchOptionsFlow(PrioritySwitchCommonFlow, OptionsFlowWithConfigE
                 category="selector",
                 config_flow=True,
             )
-        res = await self.async_step_menu()
-        return res
+        return await self.async_step_menu()
 
 
 @websocket_api.websocket_command(

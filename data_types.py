@@ -22,7 +22,7 @@ class InputType(StrEnum):
     SUN = "Sun"
     ENTITY = "Entity"
     TEMPLATE = "Template"
-    MANUAL = "Manual"
+    NONE = "None"
 
 
 @dataclass

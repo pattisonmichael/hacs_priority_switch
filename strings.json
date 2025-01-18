@@ -303,7 +303,7 @@
         "Entity": "Value Entity",
         "Template": "Value Template",
         "Sun": "Follow Sun",
-        "Manual": "Detect Manual interaction"
+        "None": "Do not output anything (Usually used together with 'Detect Manual Interaction' Control Type)"
       }
     },
     "add_input_control": {
